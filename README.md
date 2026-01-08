@@ -376,8 +376,8 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 - 项目主页: [GitHub](https://github.com/your-username/ReactEdge)
 - 问题反馈: [Issues](https://github.com/your-username/ReactEdge/issues)
-- 邮箱: contact@reactedge.com
+- 邮箱: tangpanpan23@126.com
 
 ---
 
-**让每个青少年都能拥有犀利而有力的表达能力！** 💪
+**让每个人都能拥有犀利而有力的表达能力！** 💪
