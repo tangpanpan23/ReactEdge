@@ -20,6 +20,16 @@ func main() {
 	fmt.Printf("✅ 三大职场危机应对引擎已加载，包含 %d 个反应模式\n", len(hanAI.GetExpressionPatterns()))
 	fmt.Println("   支持康辉式专业防御、成铭式逻辑反击、韩寒式态度反制")
 
+	// 显示AI服务状态
+	if hanAI.GetAIManager() != nil {
+		manager := hanAI.GetAIManager()
+		fmt.Printf("🤖 AI服务状态: ✅ 已连接 %s 服务商\n", manager.GetClient().GetProvider())
+		fmt.Printf("   可用模型: %d 个\n", len(manager.GetClient().GetAvailableModels()))
+	} else {
+		fmt.Println("🤖 AI服务状态: ⚠️ 模拟模式（未配置真实AI服务）")
+		fmt.Println("   提示: 配置环境变量或 config/ai.yaml 启用完整AI功能")
+	}
+
 	// 初始化挑战管理器
 	challengeManager := challenge.NewManager(hanAI)
 

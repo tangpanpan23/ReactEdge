@@ -1,0 +1,75 @@
+# ReactEdge AI服务配置
+# 支持多个AI服务商：TAL（默认）、OpenAI、Claude、Azure、Baidu
+
+# 默认服务商配置
+defaultProvider: "tal"  # 可选值: tal, openai, claude, azure, baidu
+
+# TAL内部AI服务配置（默认推荐）
+tal:
+  talMLOpsAppId: ""      # TAL MLOps应用ID，从环境变量TAL_MLOPS_APP_ID读取
+  talMLOpsAppKey: ""     # TAL MLOps应用密钥，从环境变量TAL_MLOPS_APP_KEY读取
+  baseURL: "http://ai-service.tal.com/openai-compatible/v1"
+  timeout: 30            # 超时时间(秒)
+  maxTokens: 2000        # 最大token数
+  temperature: 0.7       # 温度参数(0.0-1.0)
+
+  # TAL AI模型映射
+  models:
+    imageAnalysis: "qwen3-vl-plus"        # 图像分析 (视觉理解，支持思考模式)
+    textGeneration: "qwen-flash"          # 文本生成 (思考+非思考模式融合)
+    advancedReasoning: "qwen3-max"        # 复杂推理 (智能体优化)
+    voiceInteraction: "qwen3-omni-flash"  # 语音交互 (多模态语音处理)
+    videoAnalysis: "qwen3-omni-flash"     # 视频分析
+    videoGeneration: "doubao-seedance-1.0-lite-i2v"  # 视频生成
+
+# OpenAI配置
+openai:
+  apiKey: ""             # OpenAI API密钥，从环境变量OPENAI_API_KEY读取
+  baseURL: "https://api.openai.com/v1"
+  timeout: 30
+  maxTokens: 2000
+  temperature: 0.7
+
+  # OpenAI模型映射
+  models:
+    imageAnalysis: "gpt-4o"
+    textGeneration: "gpt-4"
+    advancedReasoning: "gpt-4"
+    voiceInteraction: "gpt-4o"
+    videoAnalysis: "gpt-4o"
+    videoGeneration: "gpt-4o"  # OpenAI暂不支持视频生成
+
+# Claude配置
+claude:
+  apiKey: ""             # Claude API密钥，从环境变量ANTHROPIC_API_KEY读取
+  baseURL: "https://api.anthropic.com"
+  timeout: 30
+  maxTokens: 2000
+  temperature: 0.7
+
+  # Claude模型映射
+  models:
+    imageAnalysis: "claude-3-opus-20240229"
+    textGeneration: "claude-3-haiku-20240307"
+    advancedReasoning: "claude-3-opus-20240229"
+    voiceInteraction: "claude-3-opus-20240229"
+    videoAnalysis: "claude-3-opus-20240229"
+    videoGeneration: "claude-3-opus-20240229"  # Claude暂不支持视频生成
+
+# Azure OpenAI配置
+azure:
+  apiKey: ""             # Azure API密钥，从环境变量AZURE_OPENAI_API_KEY读取
+  endpoint: ""           # Azure端点，从环境变量AZURE_OPENAI_ENDPOINT读取
+  deployment: "gpt-4"    # 部署名称
+  apiVersion: "2024-02-01"
+  timeout: 30
+  maxTokens: 2000
+  temperature: 0.7
+
+# 百度AI配置
+baidu:
+  apiKey: ""             # 百度API Key，从环境变量BAIDU_API_KEY读取
+  secretKey: ""          # 百度Secret Key，从环境变量BAIDU_SECRET_KEY读取
+  timeout: 30
+  maxTokens: 2000
+  temperature: 0.7

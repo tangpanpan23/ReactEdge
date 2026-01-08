@@ -1,0 +1,329 @@
+package ai
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/spf13/viper"
+)
+
+// Config AI服务配置
+type Config struct {
+	// 默认服务商
+	DefaultProvider string `json:"defaultProvider" yaml:"defaultProvider"`
+
+	// OpenAI兼容服务配置
+	OpenAI OpenAIConfig `json:"openai" yaml:"openai"`
+
+	// Claude配置
+	Claude ClaudeConfig `json:"claude" yaml:"claude"`
+
+	// 其他服务商配置可以在这里扩展
+	Azure   AzureConfig   `json:"azure" yaml:"azure"`
+	Baidu   BaiduConfig   `json:"baidu" yaml:"baidu"`
+	TAL     TALConfig     `json:"tal" yaml:"tal"`
+}
+
+// OpenAIConfig OpenAI兼容服务配置
+type OpenAIConfig struct {
+	APIKey     string  `json:"apiKey" yaml:"apiKey"`
+	BaseURL    string  `json:"baseURL" yaml:"baseURL"`
+	Timeout    int     `json:"timeout" yaml:"timeout"`
+	MaxTokens  int     `json:"maxTokens" yaml:"maxTokens"`
+	Temperature float32 `json:"temperature" yaml:"temperature"`
+
+	// 模型映射
+	Models ModelMapping `json:"models" yaml:"models"`
+}
+
+// ClaudeConfig Claude配置
+type ClaudeConfig struct {
+	APIKey     string  `json:"apiKey" yaml:"apiKey"`
+	BaseURL    string  `json:"baseURL" yaml:"baseURL"`
+	Timeout    int     `json:"timeout" yaml:"timeout"`
+	MaxTokens  int     `json:"maxTokens" yaml:"maxTokens"`
+	Temperature float32 `json:"temperature" yaml:"temperature"`
+
+	// 模型映射
+	Models ModelMapping `json:"models" yaml:"models"`
+}
+
+// AzureConfig Azure AI配置
+type AzureConfig struct {
+	APIKey      string `json:"apiKey" yaml:"apiKey"`
+	Endpoint    string `json:"endpoint" yaml:"endpoint"`
+	Deployment  string `json:"deployment" yaml:"deployment"`
+	APIVersion  string `json:"apiVersion" yaml:"apiVersion"`
+	Timeout     int    `json:"timeout" yaml:"timeout"`
+	MaxTokens   int    `json:"maxTokens" yaml:"maxTokens"`
+	Temperature float32 `json:"temperature" yaml:"temperature"`
+}
+
+// BaiduConfig 百度AI配置
+type BaiduConfig struct {
+	APIKey     string  `json:"apiKey" yaml:"apiKey"`
+	SecretKey  string  `json:"secretKey" yaml:"secretKey"`
+	Timeout    int     `json:"timeout" yaml:"timeout"`
+	MaxTokens  int     `json:"maxTokens" yaml:"maxTokens"`
+	Temperature float32 `json:"temperature" yaml:"temperature"`
+}
+
+// TALConfig TAL内部AI服务配置
+type TALConfig struct {
+	TAL_MLOPS_APP_ID  string  `json:"talMLOpsAppId" yaml:"talMLOpsAppId"`
+	TAL_MLOPS_APP_KEY string  `json:"talMLOpsAppKey" yaml:"talMLOpsAppKey"`
+	BaseURL           string  `json:"baseURL" yaml:"baseURL"`
+	Timeout           int     `json:"timeout" yaml:"timeout"`
+	MaxTokens         int     `json:"maxTokens" yaml:"maxTokens"`
+	Temperature       float32 `json:"temperature" yaml:"temperature"`
+
+	// 模型映射
+	Models ModelMapping `json:"models" yaml:"models"`
+}
+
+// ModelMapping 模型映射配置
+type ModelMapping struct {
+	ImageAnalysis     string `json:"imageAnalysis" yaml:"imageAnalysis"`
+	TextGeneration    string `json:"textGeneration" yaml:"textGeneration"`
+	AdvancedReasoning string `json:"advancedReasoning" yaml:"advancedReasoning"`
+	VoiceInteraction  string `json:"voiceInteraction" yaml:"voiceInteraction"`
+	VideoAnalysis     string `json:"videoAnalysis" yaml:"videoAnalysis"`
+	VideoGeneration   string `json:"videoGeneration" yaml:"videoGeneration"`
+}
+
+// ProviderType AI服务商类型
+type ProviderType string
+
+const (
+	ProviderOpenAI ProviderType = "openai"
+	ProviderClaude ProviderType = "claude"
+	ProviderAzure  ProviderType = "azure"
+	ProviderBaidu  ProviderType = "baidu"
+	ProviderTAL    ProviderType = "tal"
+)
+
+// DefaultConfig 返回默认配置
+func DefaultConfig() *Config {
+	return &Config{
+		DefaultProvider: string(ProviderTAL), // 默认使用TAL内部服务
+		TAL: TALConfig{
+			BaseURL:     "http://ai-service.tal.com/openai-compatible/v1",
+			Timeout:     30,
+			MaxTokens:   2000,
+			Temperature: 0.7,
+			Models: ModelMapping{
+				ImageAnalysis:     "qwen3-vl-plus",
+				TextGeneration:    "qwen-flash",
+				AdvancedReasoning: "qwen3-max",
+				VoiceInteraction:  "qwen3-omni-flash",
+				VideoAnalysis:     "qwen3-omni-flash",
+				VideoGeneration:   "doubao-seedance-1.0-lite-i2v",
+			},
+		},
+		OpenAI: OpenAIConfig{
+			BaseURL:     "https://api.openai.com/v1",
+			Timeout:     30,
+			MaxTokens:   2000,
+			Temperature: 0.7,
+			Models: ModelMapping{
+				ImageAnalysis:     "gpt-4o",
+				TextGeneration:    "gpt-4",
+				AdvancedReasoning: "gpt-4",
+				VoiceInteraction:  "gpt-4o",
+			},
+		},
+		Claude: ClaudeConfig{
+			BaseURL:     "https://api.anthropic.com",
+			Timeout:     30,
+			MaxTokens:   2000,
+			Temperature: 0.7,
+			Models: ModelMapping{
+				ImageAnalysis:     "claude-3-opus-20240229",
+				TextGeneration:    "claude-3-haiku-20240307",
+				AdvancedReasoning: "claude-3-opus-20240229",
+				VoiceInteraction:  "claude-3-opus-20240229",
+			},
+		},
+	}
+}
+
+// LoadConfig 从文件加载配置
+func LoadConfig(configPath string) (*Config, error) {
+	if configPath == "" {
+		configPath = "config/ai.yaml"
+	}
+
+	// 检查文件是否存在
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		// 文件不存在，返回默认配置
+		fmt.Printf("配置文件 %s 不存在，使用默认配置\n", configPath)
+		return DefaultConfig(), nil
+	}
+
+	viper.SetConfigFile(configPath)
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("读取配置文件失败: %w", err)
+	}
+
+	var config Config
+	if err := viper.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("解析配置文件失败: %w", err)
+	}
+
+	// 从环境变量加载敏感信息
+	loadFromEnv(&config)
+
+	fmt.Printf("✅ AI配置加载成功，默认服务商: %s\n", config.DefaultProvider)
+	return &config, nil
+}
+
+// loadFromEnv 从环境变量加载配置
+func loadFromEnv(config *Config) {
+	// TAL配置
+	if talAppID := os.Getenv("TAL_MLOPS_APP_ID"); talAppID != "" {
+		config.TAL.TAL_MLOPS_APP_ID = talAppID
+	}
+	if talAppKey := os.Getenv("TAL_MLOPS_APP_KEY"); talAppKey != "" {
+		config.TAL.TAL_MLOPS_APP_KEY = talAppKey
+	}
+
+	// OpenAI配置
+	if openaiKey := os.Getenv("OPENAI_API_KEY"); openaiKey != "" {
+		config.OpenAI.APIKey = openaiKey
+	}
+
+	// Claude配置
+	if claudeKey := os.Getenv("ANTHROPIC_API_KEY"); claudeKey != "" {
+		config.Claude.APIKey = claudeKey
+	}
+
+	// Azure配置
+	if azureKey := os.Getenv("AZURE_OPENAI_API_KEY"); azureKey != "" {
+		config.Azure.APIKey = azureKey
+	}
+	if azureEndpoint := os.Getenv("AZURE_OPENAI_ENDPOINT"); azureEndpoint != "" {
+		config.Azure.Endpoint = azureEndpoint
+	}
+
+	// 百度配置
+	if baiduKey := os.Getenv("BAIDU_API_KEY"); baiduKey != "" {
+		config.Baidu.APIKey = baiduKey
+	}
+	if baiduSecret := os.Getenv("BAIDU_SECRET_KEY"); baiduSecret != "" {
+		config.Baidu.SecretKey = baiduSecret
+	}
+}
+
+// GetProviderConfig 获取指定服务商的配置
+func (c *Config) GetProviderConfig(provider ProviderType) interface{} {
+	switch provider {
+	case ProviderOpenAI:
+		return c.OpenAI
+	case ProviderClaude:
+		return c.Claude
+	case ProviderAzure:
+		return c.Azure
+	case ProviderBaidu:
+		return c.Baidu
+	case ProviderTAL:
+		return c.TAL
+	default:
+		return nil
+	}
+}
+
+// ValidateConfig 验证配置有效性
+func (c *Config) ValidateConfig() error {
+	if c.DefaultProvider == "" {
+		return fmt.Errorf("defaultProvider不能为空")
+	}
+
+	// 检查默认服务商是否有效
+	validProviders := []string{string(ProviderOpenAI), string(ProviderClaude), string(ProviderAzure), string(ProviderBaidu), string(ProviderTAL)}
+	isValid := false
+	for _, provider := range validProviders {
+		if c.DefaultProvider == provider {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
+		return fmt.Errorf("无效的defaultProvider: %s，可选值: %s", c.DefaultProvider, strings.Join(validProviders, ", "))
+	}
+
+	// 验证TAL配置
+	if c.TAL.TAL_MLOPS_APP_ID == "" || c.TAL.TAL_MLOPS_APP_KEY == "" {
+		fmt.Printf("⚠️ TAL MLOps配置不完整，将使用其他服务商\n")
+	}
+
+	// 验证OpenAI配置
+	if c.OpenAI.APIKey == "" {
+		fmt.Printf("⚠️ OpenAI API Key未配置\n")
+	}
+
+	// 验证Claude配置
+	if c.Claude.APIKey == "" {
+		fmt.Printf("⚠️ Claude API Key未配置\n")
+	}
+
+	return nil
+}
+
+// GetModelForTask 根据任务类型获取模型名称
+func (c *Config) GetModelForTask(provider ProviderType, task string) string {
+	var models ModelMapping
+
+	switch provider {
+	case ProviderTAL:
+		models = c.TAL.Models
+	case ProviderOpenAI:
+		models = c.OpenAI.Models
+	case ProviderClaude:
+		models = c.Claude.Models
+	default:
+		return ""
+	}
+
+	switch task {
+	case "image_analysis":
+		return models.ImageAnalysis
+	case "text_generation":
+		return models.TextGeneration
+	case "advanced_reasoning":
+		return models.AdvancedReasoning
+	case "voice_interaction":
+		return models.VoiceInteraction
+	case "video_analysis":
+		return models.VideoAnalysis
+	case "video_generation":
+		return models.VideoGeneration
+	default:
+		return models.TextGeneration // 默认使用文本生成模型
+	}
+}
+
+// GetAvailableProviders 获取所有可用的服务商列表
+func (c *Config) GetAvailableProviders() []ProviderType {
+	providers := []ProviderType{}
+
+	// 检查各个服务商是否配置完整
+	if c.TAL.TAL_MLOPS_APP_ID != "" && c.TAL.TAL_MLOPS_APP_KEY != "" {
+		providers = append(providers, ProviderTAL)
+	}
+	if c.OpenAI.APIKey != "" {
+		providers = append(providers, ProviderOpenAI)
+	}
+	if c.Claude.APIKey != "" {
+		providers = append(providers, ProviderClaude)
+	}
+	if c.Azure.APIKey != "" && c.Azure.Endpoint != "" {
+		providers = append(providers, ProviderAzure)
+	}
+	if c.Baidu.APIKey != "" && c.Baidu.SecretKey != "" {
+		providers = append(providers, ProviderBaidu)
+	}
+
+	return providers
+}

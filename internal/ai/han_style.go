@@ -1,8 +1,10 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
+	"reactedge/pkg/ai"
 	"regexp"
 	"strings"
 	"time"
@@ -38,20 +40,28 @@ type ExpressionDNA struct {
 	NextChallenge    string              `json:"next_challenge"`    // 下次挑战
 }
 
-// HanStyleAI 韩寒风格AI引擎
+// HanStyleAI 韩寒风格AI引擎（现已扩展支持多风格）
 type HanStyleAI struct {
 	expressionPatterns []ExpressionPattern
 	gameAnalogies      map[string][]string
 	hanStyleCorpus     []string
 	random             *rand.Rand
+	aiManager          *ai.Manager // 新增AI服务管理器
 }
 
-// NewHanStyleAI 创建韩寒风格AI引擎
+// NewHanStyleAI 创建韩寒风格AI引擎（现已扩展支持多风格）
 func NewHanStyleAI() *HanStyleAI {
+	// 初始化AI服务管理器
+	aiManager, err := ai.NewManager("config/ai.yaml")
+	if err != nil {
+		fmt.Printf("⚠️ AI服务管理器初始化失败，使用模拟模式: %v\n", err)
+		aiManager = nil
+	}
 	rand.Seed(time.Now().UnixNano())
 
 	ai := &HanStyleAI{
-		random: rand.New(rand.NewSource(time.Now().UnixNano())),
+		random:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		aiManager: aiManager,
 	}
 
 	ai.initializeExpressionPatterns()
@@ -156,6 +166,11 @@ func (ai *HanStyleAI) initializeHanCorpus() {
 // GetExpressionPatterns 获取表达模式库
 func (ai *HanStyleAI) GetExpressionPatterns() []ExpressionPattern {
 	return ai.expressionPatterns
+}
+
+// GetAIManager 获取AI服务管理器
+func (ai *HanStyleAI) GetAIManager() *ai.Manager {
+	return ai.aiManager
 }
 
 // GeneratePersonalizedTemplate 生成个性化模板
@@ -360,4 +375,164 @@ func (ai *HanStyleAI) DetectUserProfile(speech string) UserProfile {
 	profile.Strengths = []string{"敢于表达观点", "善于观察生活"}
 
 	return profile
+}
+
+// AI增强方法 - 使用新的AI服务
+
+// GenerateReactionTemplatesAI 使用AI生成反应模板
+func (ai *HanStyleAI) GenerateReactionTemplatesAI(ctx context.Context, scenario, style string) ([]ai.ReactionTemplate, error) {
+	if ai.aiManager == nil {
+		// 如果AI服务不可用，返回默认模板
+		return ai.getDefaultReactionTemplates(scenario, style), nil
+	}
+
+	client := ai.aiManager.GetClient()
+	return client.GenerateReactionTemplates(ctx, scenario, style)
+}
+
+// AnalyzeExpressionStyleAI 使用AI分析表达风格
+func (ai *HanStyleAI) AnalyzeExpressionStyleAI(ctx context.Context, personName string, sampleText string) (*ai.StyleAnalysis, error) {
+	if ai.aiManager == nil {
+		// 如果AI服务不可用，返回默认分析
+		return ai.getDefaultStyleAnalysis(personName), nil
+	}
+
+	client := ai.aiManager.GetClient()
+	return client.AnalyzeExpressionStyle(ctx, personName, sampleText)
+}
+
+// SimulateDebateAI 使用AI模拟辩论
+func (ai *HanStyleAI) SimulateDebateAI(ctx context.Context, scenario string, difficulty int, userStyle string) (*ai.DebateSimulation, error) {
+	if ai.aiManager == nil {
+		// 如果AI服务不可用，返回默认模拟
+		return ai.getDefaultDebateSimulation(scenario, difficulty, userStyle), nil
+	}
+
+	client := ai.aiManager.GetClient()
+	return client.SimulateDebate(ctx, scenario, difficulty, userStyle)
+}
+
+// EvaluateReactionAI 使用AI评估反应
+func (ai *HanStyleAI) EvaluateReactionAI(ctx context.Context, userResponse, scenario, expectedStyle string) (*ai.ReactionEvaluation, error) {
+	if ai.aiManager == nil {
+		// 如果AI服务不可用，返回默认评估
+		return ai.getDefaultReactionEvaluation(), nil
+	}
+
+	client := ai.aiManager.GetClient()
+	return client.EvaluateReaction(ctx, userResponse, scenario, expectedStyle)
+}
+
+// GeneratePersonalizedTrainingAI 使用AI生成个性化训练计划
+func (ai *HanStyleAI) GeneratePersonalizedTrainingAI(ctx context.Context, userProfile map[string]interface{}, currentLevel int) (*ai.PersonalizedTraining, error) {
+	if ai.aiManager == nil {
+		// 如果AI服务不可用，返回默认训练计划
+		return ai.getDefaultPersonalizedTraining(userProfile, currentLevel), nil
+	}
+
+	return ai.aiManager.GeneratePersonalizedTraining(ctx, userProfile, currentLevel)
+}
+
+// 默认实现方法
+
+func (ai *HanStyleAI) getDefaultReactionTemplates(scenario, style string) []ai.ReactionTemplate {
+	return []ai.ReactionTemplate{
+		{
+			Scenario: scenario,
+			Steps: []string{
+				"快速分析对方意图",
+				"选择合适的回应策略",
+				"用" + style + "风格表达观点",
+			},
+			KeyPhrases: []string{
+				"我理解您的观点，但...",
+				"从另一个角度来看...",
+				"这让我想到...",
+			},
+			StyleNotes: "保持" + style + "风格的核心特点",
+		},
+	}
+}
+
+func (ai *HanStyleAI) getDefaultStyleAnalysis(personName string) *ai.StyleAnalysis {
+	return &ai.StyleAnalysis{
+		PersonName: personName,
+		LanguageFeatures: map[string]interface{}{
+			"vocabulary": "丰富多样",
+			"sentence_structure": "灵活多变",
+		},
+		ThinkingPatterns: map[string]interface{}{
+			"logic_structure": "发散性思维",
+			"argumentation": "类比论证",
+		},
+		CommunicationStrategy: map[string]interface{}{
+			"position_expression": "直接坦率",
+			"conflict_handling": "不回避问题",
+		},
+		PersonalTraits: map[string]interface{}{
+			"unique_identifiers": []string{"真诚", "犀利"},
+			"style_labels": []string{"韩寒风格"},
+		},
+		OverallScore: 8.5,
+		StyleTags:    []string{"犀利", "真实", "幽默"},
+	}
+}
+
+func (ai *HanStyleAI) getDefaultDebateSimulation(scenario string, difficulty int, userStyle string) *ai.DebateSimulation {
+	return &ai.DebateSimulation{
+		Scenario:        scenario,
+		OpponentOpening: "我认为这个方案有严重的问题...",
+		InteractionRounds: []ai.DebateRound{
+			{
+				RoundNumber: 1,
+				OpponentMove: "这个方案成本太高了",
+				ExpectedResponse: "让我们从投资回报率的角度来分析",
+				ReactionTips: "保持冷静，用数据回应",
+			},
+		},
+		KeyReactionPoints: []string{"数据支撑", "逻辑推理", "风格一致"},
+		StyleSuggestions: []string{"用" + userStyle + "风格回应", "注意语速控制"},
+		Difficulty: difficulty,
+	}
+}
+
+func (ai *HanStyleAI) getDefaultReactionEvaluation() *ai.ReactionEvaluation {
+	return &ai.ReactionEvaluation{
+		ContentQuality: ai.EvaluationItem{
+			Score:       7.5,
+			Description: "内容逻辑清晰，表达准确",
+			Suggestions: []string{"可以增加更多具体数据"},
+		},
+		StyleConformity: ai.EvaluationItem{
+			Score:       8.0,
+			Description: "基本符合风格要求",
+			Suggestions: []string{"可以更自然一些"},
+		},
+		ReactionSpeed: ai.EvaluationItem{
+			Score:       7.0,
+			Description: "反应速度适中",
+			Suggestions: []string{"适当加快反应速度"},
+		},
+		CommunicationEffect: ai.EvaluationItem{
+			Score:       8.5,
+			Description: "沟通效果良好",
+			Suggestions: []string{"注意倾听对方反馈"},
+		},
+		OverallScore: 7.8,
+		Strengths:    []string{"逻辑清晰", "表达专业"},
+		Improvements: []string{"增加互动性", "注意语速控制"},
+	}
+}
+
+func (ai *HanStyleAI) getDefaultPersonalizedTraining(userProfile map[string]interface{}, level int) *ai.PersonalizedTraining {
+	return &ai.PersonalizedTraining{
+		UserLevel:      level,
+		MainFocus:      []string{"反应速度", "内容质量", "风格适应"},
+		RecommendedScenarios: []string{"述职答辩", "分享会提问", "争辩冲突"},
+		WeeklyPlan: []ai.WeeklySession{
+			{Day: 1, Focus: "基础训练", Duration: 15, Scenarios: []string{"简单问答"}},
+			{Day: 2, Focus: "风格练习", Duration: 20, Scenarios: []string{"正式场合"}},
+		},
+		ExpectedOutcomes: []string{"提升反应速度", "增强沟通能力"},
+	}
 }
