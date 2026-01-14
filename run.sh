@@ -59,7 +59,7 @@ case $choice in
         echo ""
 
         # 运行演示
-        if go run demo.go; then
+        if go run cmd/demo.go; then
             echo ""
             echo "✅ 演示完成！"
         else

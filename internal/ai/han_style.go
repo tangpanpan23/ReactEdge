@@ -1,11 +1,8 @@
 package ai
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
-	"reactedge/pkg/ai"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -46,22 +43,14 @@ type HanStyleAI struct {
 	gameAnalogies      map[string][]string
 	hanStyleCorpus     []string
 	random             *rand.Rand
-	aiManager          *ai.Manager // 新增AI服务管理器
 }
 
 // NewHanStyleAI 创建韩寒风格AI引擎（现已扩展支持多风格）
 func NewHanStyleAI() *HanStyleAI {
-	// 初始化AI服务管理器
-	aiManager, err := ai.NewManager("config/ai.yaml")
-	if err != nil {
-		fmt.Printf("⚠️ AI服务管理器初始化失败，使用模拟模式: %v\n", err)
-		aiManager = nil
-	}
 	rand.Seed(time.Now().UnixNano())
 
 	ai := &HanStyleAI{
-		random:    rand.New(rand.NewSource(time.Now().UnixNano())),
-		aiManager: aiManager,
+		random: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
 	ai.initializeExpressionPatterns()
@@ -163,14 +152,9 @@ func (ai *HanStyleAI) initializeHanCorpus() {
 	}
 }
 
-// GetExpressionPatterns 获取表达模式库
+// GetExpressionPatterns 获取表达模式
 func (ai *HanStyleAI) GetExpressionPatterns() []ExpressionPattern {
 	return ai.expressionPatterns
-}
-
-// GetAIManager 获取AI服务管理器
-func (ai *HanStyleAI) GetAIManager() *ai.Manager {
-	return ai.aiManager
 }
 
 // GeneratePersonalizedTemplate 生成个性化模板
@@ -197,9 +181,6 @@ func (ai *HanStyleAI) GeneratePersonalizedTemplate(profile UserProfile, topic st
 // AnalyzeExpressionDNA 分析表达DNA
 func (ai *HanStyleAI) AnalyzeExpressionDNA(userSpeech string, profile UserProfile) ExpressionDNA {
 	// 简单的分析逻辑（实际项目中会更复杂）
-	words := strings.Fields(userSpeech)
-	wordCount := len(words)
-
 	// 计算犀利指数
 	sharpenessScore := 60 + ai.random.Intn(40) // 60-99随机
 
@@ -377,162 +358,74 @@ func (ai *HanStyleAI) DetectUserProfile(speech string) UserProfile {
 	return profile
 }
 
-// AI增强方法 - 使用新的AI服务
+// GenerateStyleResponse 根据指定风格生成回答
+func (ai *HanStyleAI) GenerateStyleResponse(style, question, content string) string {
+	// 移除引号
+	question = strings.Trim(question, "\"")
 
-// GenerateReactionTemplatesAI 使用AI生成反应模板
-func (ai *HanStyleAI) GenerateReactionTemplatesAI(ctx context.Context, scenario, style string) ([]ai.ReactionTemplate, error) {
-	if ai.aiManager == nil {
-		// 如果AI服务不可用，返回默认模板
-		return ai.getDefaultReactionTemplates(scenario, style), nil
-	}
-
-	client := ai.aiManager.GetClient()
-	return client.GenerateReactionTemplates(ctx, scenario, style)
-}
-
-// AnalyzeExpressionStyleAI 使用AI分析表达风格
-func (ai *HanStyleAI) AnalyzeExpressionStyleAI(ctx context.Context, personName string, sampleText string) (*ai.StyleAnalysis, error) {
-	if ai.aiManager == nil {
-		// 如果AI服务不可用，返回默认分析
-		return ai.getDefaultStyleAnalysis(personName), nil
-	}
-
-	client := ai.aiManager.GetClient()
-	return client.AnalyzeExpressionStyle(ctx, personName, sampleText)
-}
-
-// SimulateDebateAI 使用AI模拟辩论
-func (ai *HanStyleAI) SimulateDebateAI(ctx context.Context, scenario string, difficulty int, userStyle string) (*ai.DebateSimulation, error) {
-	if ai.aiManager == nil {
-		// 如果AI服务不可用，返回默认模拟
-		return ai.getDefaultDebateSimulation(scenario, difficulty, userStyle), nil
-	}
-
-	client := ai.aiManager.GetClient()
-	return client.SimulateDebate(ctx, scenario, difficulty, userStyle)
-}
-
-// EvaluateReactionAI 使用AI评估反应
-func (ai *HanStyleAI) EvaluateReactionAI(ctx context.Context, userResponse, scenario, expectedStyle string) (*ai.ReactionEvaluation, error) {
-	if ai.aiManager == nil {
-		// 如果AI服务不可用，返回默认评估
-		return ai.getDefaultReactionEvaluation(), nil
-	}
-
-	client := ai.aiManager.GetClient()
-	return client.EvaluateReaction(ctx, userResponse, scenario, expectedStyle)
-}
-
-// GeneratePersonalizedTrainingAI 使用AI生成个性化训练计划
-func (ai *HanStyleAI) GeneratePersonalizedTrainingAI(ctx context.Context, userProfile map[string]interface{}, currentLevel int) (*ai.PersonalizedTraining, error) {
-	if ai.aiManager == nil {
-		// 如果AI服务不可用，返回默认训练计划
-		return ai.getDefaultPersonalizedTraining(userProfile, currentLevel), nil
-	}
-
-	return ai.aiManager.GeneratePersonalizedTraining(ctx, userProfile, currentLevel)
-}
-
-// 默认实现方法
-
-func (ai *HanStyleAI) getDefaultReactionTemplates(scenario, style string) []ai.ReactionTemplate {
-	return []ai.ReactionTemplate{
-		{
-			Scenario: scenario,
-			Steps: []string{
-				"快速分析对方意图",
-				"选择合适的回应策略",
-				"用" + style + "风格表达观点",
-			},
-			KeyPhrases: []string{
-				"我理解您的观点，但...",
-				"从另一个角度来看...",
-				"这让我想到...",
-			},
-			StyleNotes: "保持" + style + "风格的核心特点",
-		},
+	switch style {
+	case "kanghui":
+		return ai.generateKanghuiResponse(question, content)
+	case "dongqing":
+		return ai.generateDongqingResponse(question, content)
+	case "hanhan":
+		return ai.generateHanhanResponse(question, content)
+	case "chengming":
+		return ai.generateChengmingResponse(question, content)
+	default:
+		return ai.generateHanhanResponse(question, content)
 	}
 }
 
-func (ai *HanStyleAI) getDefaultStyleAnalysis(personName string) *ai.StyleAnalysis {
-	return &ai.StyleAnalysis{
-		PersonName: personName,
-		LanguageFeatures: map[string]interface{}{
-			"vocabulary": "丰富多样",
-			"sentence_structure": "灵活多变",
-		},
-		ThinkingPatterns: map[string]interface{}{
-			"logic_structure": "发散性思维",
-			"argumentation": "类比论证",
-		},
-		CommunicationStrategy: map[string]interface{}{
-			"position_expression": "直接坦率",
-			"conflict_handling": "不回避问题",
-		},
-		PersonalTraits: map[string]interface{}{
-			"unique_identifiers": []string{"真诚", "犀利"},
-			"style_labels": []string{"韩寒风格"},
-		},
-		OverallScore: 8.5,
-		StyleTags:    []string{"犀利", "真实", "幽默"},
+// generateKanghuiResponse 生成康辉式回答（专业得体）
+func (ai *HanStyleAI) generateKanghuiResponse(question, content string) string {
+	// 分析问题类型并生成相应回答
+	if strings.Contains(question, "ROI") || strings.Contains(question, "数据") || strings.Contains(question, "业绩") {
+		return "根据我们的统计数据显示，这个项目的投资回报率虽然暂时偏低，但从长期战略角度来看，实际上体现了我们对可持续发展的重视。数据显示，类似的项目在初期投入后，三年内的复合增长率可以达到15%以上。重要的是，我们要从国家战略高度和行业发展趋势来审视这个问题。"
 	}
+
+	if strings.Contains(question, "技术") || strings.Contains(question, "方案") || strings.Contains(question, "可行性") {
+		return "从技术实现的角度来看，我们采用了业界最先进的解决方案。数据显示，类似的技术方案在过去两年的应用中，成功率达到了92%。关键是要建立完整的技术评估体系，从需求分析、架构设计到实施落地的全流程质量控制。"
+	}
+
+	return "这个问题值得我们深入探讨。从数据统计的角度分析，当前的情况既有挑战性，也充满了机遇。我们需要用发展的眼光看待问题，既要看到短期困难，更要把握长期趋势。数据显示，在类似情况下，企业通过技术创新和流程优化，往往能够实现质的飞跃。"
 }
 
-func (ai *HanStyleAI) getDefaultDebateSimulation(scenario string, difficulty int, userStyle string) *ai.DebateSimulation {
-	return &ai.DebateSimulation{
-		Scenario:        scenario,
-		OpponentOpening: "我认为这个方案有严重的问题...",
-		InteractionRounds: []ai.DebateRound{
-			{
-				RoundNumber: 1,
-				OpponentMove: "这个方案成本太高了",
-				ExpectedResponse: "让我们从投资回报率的角度来分析",
-				ReactionTips: "保持冷静，用数据回应",
-			},
-		},
-		KeyReactionPoints: []string{"数据支撑", "逻辑推理", "风格一致"},
-		StyleSuggestions: []string{"用" + userStyle + "风格回应", "注意语速控制"},
-		Difficulty: difficulty,
+// generateDongqingResponse 生成董卿式回答（温婉大气）
+func (ai *HanStyleAI) generateDongqingResponse(question, content string) string {
+	if strings.Contains(question, "质疑") || strings.Contains(question, "不同意") || strings.Contains(question, "不切实际") {
+		return "我非常理解您的顾虑和担心。每个人在面对新的想法时，都会有自己的思考和担忧，这是很正常的现象。让我来和您一起探讨这个问题的不同层面。我们能不能先从对方的角度来理解一下，这种担忧背后的真正关切是什么？有时候，表面的分歧往往来自于对彼此需求的误解。"
 	}
+
+	if strings.Contains(question, "ROI") || strings.Contains(question, "数据") || strings.Contains(question, "业绩") {
+		return "我能感受到您对这个数据表现的关注和焦虑。这确实是一个值得我们认真对待的问题。让我来和您分享一下我们在这个过程中的一些思考和体会。有时候，数字背后的故事比数字本身更重要。我们一起看看能不能找到一些温暖人心的解决方案。"
+	}
+
+	return "您的这个问题真的很打动我，它触及到了我们每个人都会面对的现实挑战。生活总是充满了各种不确定性，但也正因如此，我们才有机会去探索、去成长。让我和您一起，从更宽广的角度来看待这个问题，也许我们能找到一些温暖而有力的答案。"
 }
 
-func (ai *HanStyleAI) getDefaultReactionEvaluation() *ai.ReactionEvaluation {
-	return &ai.ReactionEvaluation{
-		ContentQuality: ai.EvaluationItem{
-			Score:       7.5,
-			Description: "内容逻辑清晰，表达准确",
-			Suggestions: []string{"可以增加更多具体数据"},
-		},
-		StyleConformity: ai.EvaluationItem{
-			Score:       8.0,
-			Description: "基本符合风格要求",
-			Suggestions: []string{"可以更自然一些"},
-		},
-		ReactionSpeed: ai.EvaluationItem{
-			Score:       7.0,
-			Description: "反应速度适中",
-			Suggestions: []string{"适当加快反应速度"},
-		},
-		CommunicationEffect: ai.EvaluationItem{
-			Score:       8.5,
-			Description: "沟通效果良好",
-			Suggestions: []string{"注意倾听对方反馈"},
-		},
-		OverallScore: 7.8,
-		Strengths:    []string{"逻辑清晰", "表达专业"},
-		Improvements: []string{"增加互动性", "注意语速控制"},
+// generateHanhanResponse 生成韩寒式回答（犀利直接）
+func (ai *HanStyleAI) generateHanhanResponse(question, content string) string {
+	if strings.Contains(question, "质疑") || strings.Contains(question, "不同意") || strings.Contains(question, "不切实际") {
+		return "如果这个想法真的那么不切实际，为什么还有那么多人在做类似的事情？难道成功者都是傻子，而只有质疑者才最清醒？有时候我们质疑的不是方案本身，而是我们内心的恐惧和不愿意改变的惰性。如果大家都像您这么'务实'，那这个世界恐怕早就停止进步了。"
 	}
+
+	if strings.Contains(question, "ROI") || strings.Contains(question, "数据") || strings.Contains(question, "业绩") {
+		return "ROI低？那又怎么样？难道所有的价值都能用数字精确衡量吗？如果乔布斯当年也只看ROI，苹果还会存在吗？有时候，最有价值的投资恰恰是那些短期ROI看起来不那么漂亮的。因为那些数字背后，是对未来的赌注，是对变革的勇气。质疑数据的人，往往最害怕面对真正的创新。"
+	}
+
+	return "你的这个问题让我想起一句话：当你凝视深渊时，深渊也在凝视着你。那些动不动就说'不现实'的人，往往是那些从来没有尝试过改变的人。他们质疑的不是方案，而是自己的能力和勇气。如果大家都像你这么'理性'，那人类恐怕还在茹毛饮血的时代。"
 }
 
-func (ai *HanStyleAI) getDefaultPersonalizedTraining(userProfile map[string]interface{}, level int) *ai.PersonalizedTraining {
-	return &ai.PersonalizedTraining{
-		UserLevel:      level,
-		MainFocus:      []string{"反应速度", "内容质量", "风格适应"},
-		RecommendedScenarios: []string{"述职答辩", "分享会提问", "争辩冲突"},
-		WeeklyPlan: []ai.WeeklySession{
-			{Day: 1, Focus: "基础训练", Duration: 15, Scenarios: []string{"简单问答"}},
-			{Day: 2, Focus: "风格练习", Duration: 20, Scenarios: []string{"正式场合"}},
-		},
-		ExpectedOutcomes: []string{"提升反应速度", "增强沟通能力"},
+// generateChengmingResponse 生成成铭式回答（逻辑严谨）
+func (ai *HanStyleAI) generateChengmingResponse(question, content string) string {
+	if strings.Contains(question, "质疑") || strings.Contains(question, "不同意") || strings.Contains(question, "不切实际") {
+		return "让我们从逻辑的角度来分析这个问题。您质疑这个方案不切实际，那么我请问：您的'实际'标准是什么？是基于历史数据统计，还是个人经验判断？如果我们承认您的逻辑前提，那么按照同样的推理，我们就应该否定历史上所有的重大创新。因为按照'实际'的标准，电话、互联网、飞机这些东西在发明前都是'不切实际'的。"
 	}
+
+	if strings.Contains(question, "ROI") || strings.Contains(question, "数据") || strings.Contains(question, "业绩") {
+		return "让我们从成本结构和投资回报的本质来分析。表面上看15%的增长似乎不高，但如果我们深入分析这个数字的构成，就会发现其中隐藏着更大的机会。关键不在于数字本身，而在于我们如何重新定义和优化这些变量之间的关系。很多时候，所谓的低ROI，其实是低效运营的反映，而不是战略方向的问题。"
+	}
+
+	return "这个问题很有意思，让我们从几个维度来层层分析。首先从现象层面来看，然后深入到本质原因，最后探讨解决方案的可能性。这样的分析框架能帮助我们避免片面性，避免用战术层面的困难否定战略层面的价值。重要的是建立正确的思维模型，而不是停留在表面现象的判断。"
 }

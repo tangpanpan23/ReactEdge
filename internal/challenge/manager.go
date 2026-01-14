@@ -2,7 +2,6 @@ package challenge
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"reactedge/internal/ai"
