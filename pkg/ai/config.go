@@ -3,14 +3,14 @@ package ai
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
-
-	"github.com/spf13/viper"
 )
 
 // Config AI服务配置
 type Config struct {
+	// AI模式：internal(对内) 或 external(对外)
+	AIMode string `json:"aiMode" yaml:"aiMode"`
+
 	// 默认服务商
 	DefaultProvider string `json:"defaultProvider" yaml:"defaultProvider"`
 
@@ -151,32 +151,14 @@ func DefaultConfig() *Config {
 
 // LoadConfig 从文件加载配置
 func LoadConfig(configPath string) (*Config, error) {
-	if configPath == "" {
-		configPath = "config/ai.yaml"
-	}
-
-	// 检查文件是否存在
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// 文件不存在，返回默认配置
-		fmt.Printf("配置文件 %s 不存在，使用默认配置\n", configPath)
-		return DefaultConfig(), nil
-	}
-
-	viper.SetConfigFile(configPath)
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("读取配置文件失败: %w", err)
-	}
-
-	var config Config
-	if err := viper.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("解析配置文件失败: %w", err)
-	}
+	// 使用硬编码的配置，避免依赖外部包
+	config := DefaultConfig()
 
 	// 从环境变量加载敏感信息
-	loadFromEnv(&config)
+	loadFromEnv(config)
 
 	fmt.Printf("✅ AI配置加载成功，默认服务商: %s\n", config.DefaultProvider)
-	return &config, nil
+	return config, nil
 }
 
 // loadFromEnv 从环境变量加载配置
@@ -326,4 +308,12 @@ func (c *Config) GetAvailableProviders() []ProviderType {
 	}
 
 	return providers
+}
+
+// GetAIMode 获取AI模式
+func (c *Config) GetAIMode() string {
+	if c.AIMode == "" {
+		return "internal" // 默认对内模式
+	}
+	return c.AIMode
 }

@@ -1,0 +1,130 @@
+# ReactEdge 应用配置文件
+# 支持动态调整各种配置项
+
+# 服务器配置
+server:
+  # Web服务端口 (6000-6999范围)
+  port: "6000"
+
+  # 服务器超时配置 (秒)
+  read_timeout: 30
+  write_timeout: 30
+
+  # 服务器主机地址
+  host: "0.0.0.0"
+
+  # 是否启用HTTPS
+  tls_enabled: false
+
+  # TLS证书路径 (当启用HTTPS时需要)
+  tls_cert_file: ""
+  tls_key_file: ""
+
+# AI服务配置
+ai:
+  # AI模式: internal(对内使用TAL) 或 external(对外使用开放模型)
+  mode: "internal"
+
+  # 最大分析时间 (秒)
+  max_analysis_time: 60
+
+  # 是否启用缓存
+  cache_enabled: true
+
+  # 缓存配置
+  cache:
+    # 缓存过期时间 (秒)
+    ttl: 3600
+    # 最大缓存条目数
+    max_entries: 1000
+
+  # 熔断器配置
+  circuit_breaker:
+    # 最大失败次数
+    max_failures: 5
+    # 熔断恢复时间 (秒)
+    timeout: 60
+
+  # 并发控制
+  concurrency:
+    # 最大并发请求数
+    max_concurrent: 10
+
+  # 请求限流
+  rate_limit:
+    # 每小时最大请求数
+    requests_per_hour: 1000
+    # 突发请求数
+    burst_limit: 100
+
+# 日志配置
+logging:
+  # 日志级别: debug, info, warn, error
+  level: "info"
+
+  # 日志格式: json 或 text
+  format: "text"
+
+  # 是否输出到文件
+  file_enabled: false
+
+  # 日志文件路径
+  file_path: "logs/reactedge.log"
+
+  # 日志轮转配置
+  rotation:
+    # 最大文件大小 (MB)
+    max_size: 100
+    # 最大备份文件数
+    max_backups: 5
+    # 最大保存天数
+    max_age: 30
+
+# 监控配置
+monitoring:
+  # 是否启用监控
+  enabled: true
+
+  # 监控端口 (与主服务端口不同)
+  port: "6060"
+
+  # 健康检查路径
+  health_check_path: "/health"
+
+  # 指标收集
+  metrics:
+    # 是否启用Prometheus指标
+    prometheus_enabled: true
+    # 指标路径
+    path: "/metrics"
+
+# 开发环境配置
+development:
+  # 是否启用调试模式
+  debug: false
+
+  # 是否启用CORS
+  cors_enabled: true
+
+  # CORS允许的源
+  cors_origins: ["http://localhost:3000", "http://localhost:8080", "http://localhost:6000"]
+
+  # 是否启用请求日志
+  request_logging: true
+
+  # 是否启用SQL查询日志
+  sql_logging: false
+
+# 生产环境配置
+production:
+  # 是否启用Gzip压缩
+  gzip_enabled: true
+
+  # 是否启用请求限流
+  rate_limiting_enabled: true
+
+  # 静态文件缓存时间 (秒)
+  static_cache_ttl: 86400
+
+  # 是否启用安全头
+  security_headers_enabled: true

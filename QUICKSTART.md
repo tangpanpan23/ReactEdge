@@ -31,11 +31,14 @@ cd ReactEdge
 ### 方法2：Web界面演示
 
 ```bash
-# 运行Web服务器
+# 运行Web服务器 (默认端口6000)
 ./run.sh
 # 选择选项 1 (Web服务器模式)
 
-# 打开浏览器访问：http://localhost:8080
+# 或者自定义端口
+SERVER_PORT=6001 ./run.sh
+
+# 打开浏览器访问：http://localhost:6000
 ```
 
 **Web版特色功能：**

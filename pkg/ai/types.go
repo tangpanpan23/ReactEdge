@@ -1,10 +1,8 @@
 package ai
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"strings"
 )
 

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# AI酷表达实验室 · 韩寒特训版 - 运行脚本
+# 言刃 ReactEdge - 运行脚本
 
-echo "🎤 AI酷表达实验室 · 言刃 ReactEdge"
+echo "🎭 言刃 ReactEdge · 当技术人用代码重塑职场沟通力"
 echo "=================================="
 
 # 检查Go是否安装
@@ -20,13 +20,13 @@ export GOPROXY=https://goproxy.cn,direct
 
 # 清理之前的构建
 echo "🧹 清理之前的构建..."
-rm -f reactedge demo
+rm -f reactedge
 
 # 选择运行模式
 echo ""
 echo "请选择运行模式："
-echo "1) 🌐 Web服务器模式 (完整功能)"
-echo "2) 💻 命令行演示模式 (快速体验)"
+echo "1) 🌐 Web服务器模式 (完整AI沟通训练)"
+echo "2) 💻 命令行演示模式 (快速体验四大风格)"
 echo "3) 🧪 运行测试"
 echo ""
 read -p "请输入选择 (1-3): " choice
@@ -34,7 +34,8 @@ read -p "请输入选择 (1-3): " choice
 case $choice in
     1)
         echo "🚀 启动Web服务器模式..."
-        echo "   服务器将在 http://localhost:8080 启动"
+        echo "   服务器将在 http://localhost:6000 启动"
+        echo "   支持AI风格模仿和职场沟通训练"
         echo "   按 Ctrl+C 停止服务器"
         echo ""
 
@@ -55,7 +56,7 @@ case $choice in
         ;;
     2)
         echo "💻 启动命令行演示模式..."
-        echo "   这是一个完整的3分钟表达挑战体验"
+        echo "   体验康辉、董卿、韩寒、成铭四大职场沟通风格"
         echo ""
 
         # 运行演示
@@ -81,5 +82,6 @@ case $choice in
 esac
 
 echo ""
-echo "感谢使用 AI酷表达实验室！"
+echo "感谢使用 言刃 ReactEdge！"
+echo "让技术人用代码重塑职场沟通力"
 echo "有任何问题或建议欢迎反馈。"

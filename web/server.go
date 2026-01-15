@@ -1,23 +1,32 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"time"
 
+	"reactedge/config"
 	"reactedge/internal/ai"
+	aiPkg "reactedge/pkg/ai"
 )
 
 // Server Web服务器
 type Server struct {
 	aiEngine *ai.HanStyleAI
+	aiManager *aiPkg.Manager
+	config   *config.Config
 	router   *http.ServeMux
 }
 
 // NewServer 创建Web服务器
-func NewServer(aiEngine *ai.HanStyleAI) *Server {
+func NewServer(aiEngine *ai.HanStyleAI, aiManager *aiPkg.Manager, config *config.Config) *Server {
 	server := &Server{
 		aiEngine: aiEngine,
+		aiManager: aiManager,
+		config:   config,
 		router:   http.NewServeMux(),
 	}
 
@@ -173,10 +182,84 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 生成回答
-	response := s.aiEngine.GenerateStyleResponse(req.Style, req.Question, req.Content)
+	// 使用AI服务生成风格化回答
+	var response string
+	var err error
+	if s.aiManager != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		response, err = s.generateAIResponse(ctx, req.Style, req.Question, req.Content)
+		if err != nil {
+			log.Printf("AI生成回答失败: %v", err)
+			// 降级到本地模拟回答
+			response = s.aiEngine.GenerateStyleResponse(req.Style, req.Question, req.Content)
+		}
+	} else {
+		// AI服务不可用，直接使用本地模拟回答
+		response = s.aiEngine.GenerateStyleResponse(req.Style, req.Question, req.Content)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"response": response})
+}
+
+// generateAIResponse 使用AI服务生成风格化回答
+func (s *Server) generateAIResponse(ctx context.Context, style, question, content string) (string, error) {
+	// 构建风格描述
+	styleDesc := getStyleDescription(style)
+
+	// 构建提示词
+	prompt := fmt.Sprintf(`你是一个职场沟通风格模仿专家，请模仿%s的沟通风格回答以下职场问题。
+
+风格特点：%s
+
+经典讲话内容参考：%s
+
+职场问题：%s
+
+请用%s的风格给出专业的回答。回答要体现该风格的核心特点，自然流畅，有说服力。
+
+回答：`, styleDesc["name"], styleDesc["description"], content, question, styleDesc["name"])
+
+	// 使用qwen3-max模型进行推理
+	client := s.aiManager.GetClient()
+
+	// 直接使用TAL客户端的底层API调用
+	if talClient, ok := client.(*aiPkg.TALClient); ok {
+		return talClient.GenerateResponseWithModel(ctx, prompt, "qwen3-max")
+	}
+
+	// 如果不是TAL客户端，使用通用方法
+	// 这里暂时返回错误，后续可以扩展
+	return "", fmt.Errorf("不支持的AI客户端类型")
+}
+
+// getStyleDescription 获取风格描述
+func getStyleDescription(style string) map[string]string {
+	descriptions := map[string]map[string]string{
+		"kanghui": {
+			"name": "康辉",
+			"description": "专业得体，逻辑严谨，数据支撑，权威感强，结构清晰，适合正式场合和汇报答辩",
+		},
+		"dongqing": {
+			"name": "董卿",
+			"description": "温婉大气，情感共鸣，优雅从容，善解人意，注重倾听，创造和谐沟通氛围",
+		},
+		"hanhan": {
+			"name": "韩寒",
+			"description": "犀利穿透，直言不讳，敢于挑战常规，反问拆解，态度鲜明，真诚表达",
+		},
+		"chengming": {
+			"name": "成铭",
+			"description": "逻辑严谨，层层递进，策略性强，归谬反驳，理性分析，掌控局面",
+		},
+	}
+
+	if desc, exists := descriptions[style]; exists {
+		return desc
+	}
+
+	return descriptions["kanghui"] // 默认康辉风格
 }
 

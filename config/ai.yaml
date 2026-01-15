@@ -1,6 +1,9 @@
 # ReactEdge AI服务配置
 # 支持多个AI服务商：TAL（默认）、OpenAI、Claude、Azure、Baidu
 
+# AI模式配置：internal(对内使用TAL) 或 external(对外使用开放模型)
+aiMode: "internal"  # 对内环境默认使用TAL AI模型
+
 # 默认服务商配置
 defaultProvider: "tal"  # 可选值: tal, openai, claude, azure, baidu
 

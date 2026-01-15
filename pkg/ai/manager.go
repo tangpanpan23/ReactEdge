@@ -4,14 +4,18 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // Manager AI服务管理器
 type Manager struct {
-	config    *Config
-	client    Client
-	providers map[ProviderType]Client
-	mutex     sync.RWMutex
+	config      *Config
+	factory     *AIFactory
+	client      Client
+	providers   map[ProviderType]Client
+	errorHandler *AIErrorHandler
+	circuitBreaker *AICircuitBreaker
+	mutex       sync.RWMutex
 }
 
 // NewManager 创建AI服务管理器
@@ -25,9 +29,19 @@ func NewManager(configPath string) (*Manager, error) {
 		return nil, fmt.Errorf("AI配置验证失败: %w", err)
 	}
 
+	// 创建AI工厂
+	factory := NewAIFactory(config)
+
+	// 初始化错误处理器和熔断器
+	errorHandler := NewAIErrorHandler()
+	circuitBreaker := NewAICircuitBreaker(5, 60*time.Second) // 5次失败后熔断60秒
+
 	manager := &Manager{
-		config:    config,
-		providers: make(map[ProviderType]Client),
+		config:         config,
+		factory:        factory,
+		providers:      make(map[ProviderType]Client),
+		errorHandler:   errorHandler,
+		circuitBreaker: circuitBreaker,
 	}
 
 	// 初始化可用的AI客户端
@@ -35,20 +49,22 @@ func NewManager(configPath string) (*Manager, error) {
 		return nil, fmt.Errorf("初始化AI客户端失败: %w", err)
 	}
 
-	// 设置默认客户端
-	defaultProvider := ProviderType(config.DefaultProvider)
-	if client, exists := manager.providers[defaultProvider]; exists {
-		manager.client = client
-	} else {
-		// 如果默认服务商不可用，使用第一个可用的客户端
-		for _, client := range manager.providers {
-			manager.client = client
-			fmt.Printf("⚠️ 默认服务商%s不可用，使用%s作为默认客户端\n", defaultProvider, client.GetProvider())
-			break
+	// 使用AI工厂创建默认客户端
+	client, err := factory.CreateClient()
+	if err != nil {
+		// 如果工厂创建失败，尝试使用传统方法
+		defaultProvider := ProviderType(config.DefaultProvider)
+		if fallbackClient, exists := manager.providers[defaultProvider]; exists {
+			manager.client = fallbackClient
+			fmt.Printf("⚠️ AI工厂创建失败，使用传统方法，默认服务商: %s\n", defaultProvider)
+		} else {
+			return nil, fmt.Errorf("无法创建AI客户端: %w", err)
 		}
+	} else {
+		manager.client = client
 	}
 
-	fmt.Printf("✅ AI服务管理器初始化完成，默认服务商: %s\n", manager.client.GetProvider())
+	fmt.Printf("✅ AI服务管理器初始化完成，AI模式: %s，默认服务商: %s\n", config.GetAIMode(), manager.client.GetProvider())
 	fmt.Printf("📊 可用服务商: ")
 	for provider := range manager.providers {
 		fmt.Printf("%s ", provider)
@@ -133,7 +149,34 @@ func (m *Manager) GetConfig() *Config {
 
 // AnalyzeImage 图像分析（使用默认客户端）
 func (m *Manager) AnalyzeImage(ctx context.Context, imageURL, prompt string) (*ImageAnalysisResult, error) {
-	return m.client.AnalyzeImage(ctx, imageURL, prompt)
+	// 检查熔断器状态
+	if m.circuitBreaker.IsOpen() {
+		fmt.Println("🔌 熔断器开启，使用降级响应")
+		result := m.errorHandler.FallbackResponse("analyze_image").(*ImageAnalysisResult)
+		return result, nil
+	}
+
+	// 使用熔断器包装调用
+	var result *ImageAnalysisResult
+	err := m.circuitBreaker.Call(func() error {
+		var callErr error
+		result, callErr = m.client.AnalyzeImage(ctx, imageURL, prompt)
+		if callErr != nil {
+			// 错误处理
+			m.errorHandler.HandleError(callErr, "analyze_image")
+			// 使用降级响应
+			result = m.errorHandler.FallbackResponse("analyze_image").(*ImageAnalysisResult)
+			return nil // 不返回错误，使用降级响应
+		}
+		return nil
+	})
+
+	if err != nil {
+		// 如果是熔断器错误，使用降级响应
+		result = m.errorHandler.FallbackResponse("analyze_image").(*ImageAnalysisResult)
+	}
+
+	return result, nil
 }
 
 // GenerateQuestions 生成问题（使用默认客户端）
@@ -185,26 +228,6 @@ func (m *Manager) EvaluateReaction(ctx context.Context, userResponse, scenario, 
 
 // GeneratePersonalizedTraining 生成个性化训练计划
 func (m *Manager) GeneratePersonalizedTraining(ctx context.Context, userProfile map[string]interface{}, currentLevel int) (*PersonalizedTraining, error) {
-	prompt := fmt.Sprintf(`基于用户画像生成个性化临场反应训练计划：
-
-用户画像：%v
-当前等级：%d
-
-请生成包含以下内容的训练计划：
-1. 主要训练重点
-2. 推荐的训练场景
-3. 难度递进建议
-4. 每周训练安排
-5. 预期效果评估
-
-返回JSON格式的训练计划。`, userProfile, currentLevel)
-
-	// 使用高级推理模型生成训练计划
-	client := m.GetClient()
-	questions, err := client.GenerateQuestions(ctx, fmt.Sprintf("训练计划生成：%s", prompt), "training")
-	if err != nil {
-		return m.getDefaultPersonalizedTraining(userProfile, currentLevel), nil
-	}
 
 	// 这里简化为基于问题的训练计划
 	training := &PersonalizedTraining{

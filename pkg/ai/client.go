@@ -1,8 +1,14 @@
 package ai
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -43,11 +49,6 @@ func (c *BaseClient) GetProvider() ProviderType {
 
 // NewClient 创建AI客户端
 func NewClient(provider ProviderType, config *Config) (Client, error) {
-	baseClient := &BaseClient{
-		provider: provider,
-		config:   config,
-	}
-
 	switch provider {
 	case ProviderTAL:
 		return NewTALClient(config.TAL)
@@ -67,14 +68,17 @@ func NewClient(provider ProviderType, config *Config) (Client, error) {
 // TALClient TAL内部AI服务客户端
 type TALClient struct {
 	*BaseClient
-	client *openai.Client
-	config *TALConfig
+	httpClient *http.Client
+	config     *TALConfig
+	baseURL    string
+	authToken  string
+	client     *openai.Client // OpenAI兼容客户端
 }
 
 // NewTALClient 创建TAL客户端
 func NewTALClient(config TALConfig) (*TALClient, error) {
 	// 构建认证token
-	token := fmt.Sprintf("%s:%s", config.TAL_MLOPS_APP_ID, config.TAL_MLOPS_APP_KEY)
+	authToken := fmt.Sprintf("%s:%s", config.TAL_MLOPS_APP_ID, config.TAL_MLOPS_APP_KEY)
 
 	// 设置内部AI服务端点
 	baseURL := config.BaseURL
@@ -82,34 +86,30 @@ func NewTALClient(config TALConfig) (*TALClient, error) {
 		baseURL = "http://ai-service.tal.com/openai-compatible/v1"
 	}
 
-	// 创建客户端配置
-	clientConfig := openai.DefaultConfig(token)
-	clientConfig.BaseURL = baseURL
-	clientConfig.APIType = openai.APITypeOpenAI
-
-	// 设置HTTP客户端超时时间
+	// 创建HTTP客户端
+	httpClient := &http.Client{}
 	if config.Timeout > 0 {
-		clientConfig.HTTPClient.Timeout = time.Duration(config.Timeout) * time.Second
+		httpClient.Timeout = time.Duration(config.Timeout) * time.Second
 	} else {
-		clientConfig.HTTPClient.Timeout = 70 * time.Second // 默认70秒超时
+		httpClient.Timeout = 70 * time.Second // 默认70秒超时
 	}
 
-	// 设置自定义HTTP headers用于认证
-	clientConfig.HTTPClient.Transport = &TALTransport{
-		base:  clientConfig.HTTPClient.Transport,
-		token: fmt.Sprintf("Bearer %s", token),
-	}
+	// 初始化OpenAI兼容客户端
+	openaiConfig := openai.DefaultConfig(authToken)
+	openaiConfig.BaseURL = baseURL
+	client := openai.NewClientWithConfig(openaiConfig)
 
-	client := &TALClient{
+	return &TALClient{
 		BaseClient: &BaseClient{
 			provider: ProviderTAL,
-			config:   &Config{}, // 这里需要传入完整的config
+			config:   &Config{TAL: config},
 		},
-		client: openai.NewClientWithConfig(clientConfig),
-		config: &config,
-	}
-
-	return client, nil
+		httpClient: httpClient,
+		config:     &config,
+		baseURL:    baseURL,
+		authToken:  authToken,
+		client:     client,
+	}, nil
 }
 
 // TALTransport TAL认证传输层
@@ -662,6 +662,84 @@ func (c *TALClient) SimulateDebate(ctx context.Context, scenario string, difficu
 	}
 
 	return &result, nil
+}
+
+// GenerateResponseWithModel 使用指定模型生成回答
+func (c *TALClient) GenerateResponseWithModel(ctx context.Context, prompt, model string) (string, error) {
+	// 构建OpenAI兼容的请求
+	requestBody := map[string]interface{}{
+		"model": model,
+		"messages": []map[string]string{
+			{
+				"role":    "user",
+				"content": prompt,
+			},
+		},
+		"max_tokens":  c.config.MaxTokens,
+		"temperature": c.config.Temperature,
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("构建请求失败: %w", err)
+	}
+
+	// 创建HTTP请求
+	url := fmt.Sprintf("%s/chat/completions", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	// 设置请求头
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.authToken))
+
+	// 发送请求
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("发送请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("AI服务返回错误状态码: %d, 响应: %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	// 提取回答内容
+	choices, ok := response["choices"].([]interface{})
+	if !ok || len(choices) == 0 {
+		return "", fmt.Errorf("响应中没有找到choices字段或为空")
+	}
+
+	choice, ok := choices[0].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("choice格式不正确")
+	}
+
+	message, ok := choice["message"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("message格式不正确")
+	}
+
+	content, ok := message["content"].(string)
+	if !ok {
+		return "", fmt.Errorf("content字段不存在或不是字符串")
+	}
+
+	return content, nil
 }
 
 // EvaluateReaction 评估反应
