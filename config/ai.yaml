@@ -6,8 +6,8 @@ defaultProvider: "tal"  # 可选值: tal, openai, claude, azure, baidu
 
 # TAL内部AI服务配置（默认推荐）
 tal:
-  talMLOpsAppId: ""      # TAL MLOps应用ID，从环境变量TAL_MLOPS_APP_ID读取
-  talMLOpsAppKey: ""     # TAL MLOps应用密钥，从环境变量TAL_MLOPS_APP_KEY读取
+  talMLOpsAppId: "300000712"      # TAL MLOps应用ID，从环境变量TAL_MLOPS_APP_ID读取
+  talMLOpsAppKey: "9ffb0776d5409f4131f0a314fd5cb80e"     # TAL MLOps应用密钥，从环境变量TAL_MLOPS_APP_KEY读取
   baseURL: "http://ai-service.tal.com/openai-compatible/v1"
   timeout: 30            # 超时时间(秒)
   maxTokens: 2000        # 最大token数
