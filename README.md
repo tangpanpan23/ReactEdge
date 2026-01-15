@@ -424,14 +424,18 @@ AI风格模仿的准确度直接取决于训练素材的数量和质量：
 # 克隆项目
 cd /path/to/ReactEdge
 
-# 运行程序 (默认端口6000)
+# 1. 复制示例配置文件
+cp config/app.yaml.example config/app.yaml
+cp config/ai.yaml.example config/ai.yaml
+
+# 2. 根据需要修改配置文件
+# 编辑 config/app.yaml 和 config/ai.yaml
+
+# 3. 运行程序 (默认从配置文件读取)
 go run .
 
-# 或者通过配置文件指定端口
-# 编辑 config/app.yaml 修改 server.port
-
 # 或者通过环境变量覆盖
-SERVER_PORT=6001 go run .
+SERVER_PORT=6001 AI_MODE=external go run .
 
 # 访问 http://localhost:6000 开始体验
 ```

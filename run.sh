@@ -14,6 +14,20 @@ fi
 
 echo "✅ Go版本：$(go version)"
 
+# 检查并创建配置文件
+echo "📋 检查配置文件..."
+if [ ! -f "config/app.yaml" ]; then
+    echo "  复制应用配置文件..."
+    cp config/app.yaml.example config/app.yaml
+    echo "  ✅ config/app.yaml 已创建"
+fi
+
+if [ ! -f "config/ai.yaml" ]; then
+    echo "  复制AI配置文件..."
+    cp config/ai.yaml.example config/ai.yaml
+    echo "  ✅ config/ai.yaml 已创建"
+fi
+
 # 设置环境变量
 export GO111MODULE=on
 export GOPROXY=https://goproxy.cn,direct

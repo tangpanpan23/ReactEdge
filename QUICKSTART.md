@@ -31,7 +31,12 @@ cd ReactEdge
 ### 方法2：Web界面演示
 
 ```bash
-# 运行Web服务器 (默认端口6000)
+# 1. 配置项目（首次运行需要）
+cp config/app.yaml.example config/app.yaml
+cp config/ai.yaml.example config/ai.yaml
+# 编辑配置文件设置你的参数
+
+# 2. 运行Web服务器
 ./run.sh
 # 选择选项 1 (Web服务器模式)
 
