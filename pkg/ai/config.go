@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config AI服务配置
@@ -107,7 +109,8 @@ const (
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		DefaultProvider: string(ProviderTAL), // 默认使用TAL内部服务
+		AIMode:          "internal",              // 默认对内模式
+		DefaultProvider: string(ProviderTAL),     // 默认使用TAL内部服务
 		TAL: TALConfig{
 			BaseURL:     "http://ai-service.tal.com/openai-compatible/v1",
 			Timeout:     30,
@@ -151,14 +154,67 @@ func DefaultConfig() *Config {
 
 // LoadConfig 从文件加载配置
 func LoadConfig(configPath string) (*Config, error) {
-	// 使用硬编码的配置，避免依赖外部包
+	// 默认配置
 	config := DefaultConfig()
 
-	// 从环境变量加载敏感信息
+	// 尝试从文件加载
+	if file, err := os.Open(configPath); err == nil {
+		defer file.Close()
+
+		decoder := yaml.NewDecoder(file)
+		if err := decoder.Decode(config); err != nil {
+			return nil, fmt.Errorf("解析AI配置文件失败: %w", err)
+		}
+		fmt.Printf("✅ 从文件加载AI配置: %s\n", configPath)
+	} else {
+		// 如果主配置文件不存在，尝试加载示例配置
+		examplePath := configPath + ".example"
+		if exampleFile, exampleErr := os.Open(examplePath); exampleErr == nil {
+			defer exampleFile.Close()
+
+			decoder := yaml.NewDecoder(exampleFile)
+			if err := decoder.Decode(config); err != nil {
+				return nil, fmt.Errorf("解析AI示例配置文件失败: %w", err)
+			}
+			fmt.Printf("✅ 从示例配置文件加载AI配置: %s，请复制并修改为实际配置\n", examplePath)
+		} else {
+			fmt.Printf("⚠️ AI配置文件不存在，使用默认配置: %s\n", configPath)
+		}
+	}
+
+	// 从环境变量加载敏感信息（环境变量优先级更高）
 	loadFromEnv(config)
 
-	fmt.Printf("✅ AI配置加载成功，默认服务商: %s\n", config.DefaultProvider)
+	// 验证配置
+	if err := validateAIConfig(config); err != nil {
+		return nil, fmt.Errorf("AI配置验证失败: %w", err)
+	}
+
+	fmt.Printf("✅ AI配置加载成功，默认服务商: %s，可用服务商: %v\n", config.DefaultProvider, config.GetAvailableProviders())
 	return config, nil
+}
+
+// validateAIConfig 验证AI配置
+func validateAIConfig(config *Config) error {
+	// 验证AI模式
+	if config.AIMode != "internal" && config.AIMode != "external" {
+		return fmt.Errorf("AI模式必须是 'internal' 或 'external': %s", config.AIMode)
+	}
+
+	// 验证默认服务商
+	validProviders := []string{string(ProviderTAL), string(ProviderOpenAI), string(ProviderClaude), string(ProviderAzure), string(ProviderBaidu)}
+	isValid := false
+	for _, provider := range validProviders {
+		if config.DefaultProvider == provider {
+			isValid = true
+			break
+		}
+	}
+	if !isValid {
+		return fmt.Errorf("无效的默认服务商: %s，可选值: %s", config.DefaultProvider, strings.Join(validProviders, ", "))
+	}
+
+	return nil
 }
 
 // loadFromEnv 从环境变量加载配置

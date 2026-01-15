@@ -1,5 +1,11 @@
-# ReactEdge AI服务配置
+# ReactEdge AI服务配置示例文件
 # 支持多个AI服务商：TAL（默认）、OpenAI、Claude、Azure、Baidu
+#
+# 使用说明：
+# 1. 复制此文件为 ai.yaml: cp config/ai.yaml.example config/ai.yaml
+# 2. 根据你的环境修改相应的配置项
+# 3. 设置相应的环境变量或直接在文件中填写敏感信息
+# 4. 敏感信息请妥善保管，不要提交到版本控制系统
 
 # AI模式配置：internal(对内使用TAL) 或 external(对外使用开放模型)
 aiMode: "internal"  # 对内环境默认使用TAL AI模型
@@ -7,10 +13,10 @@ aiMode: "internal"  # 对内环境默认使用TAL AI模型
 # 默认服务商配置
 defaultProvider: "tal"  # 可选值: tal, openai, claude, azure, baidu
 
-# TAL内部AI服务配置（默认推荐）
+# TAL内部AI服务配置（企业内部使用）
 tal:
-  talMLOpsAppId: "300000712"      # TAL MLOps应用ID，从环境变量TAL_MLOPS_APP_ID读取
-  talMLOpsAppKey: "9ffb0776d5409f4131f0a314fd5cb80e"     # TAL MLOps应用密钥，从环境变量TAL_MLOPS_APP_KEY读取
+  talMLOpsAppId: "your-tal-app-id"      # TAL MLOps应用ID，从环境变量TAL_MLOPS_APP_ID读取
+  talMLOpsAppKey: "your-tal-app-key"    # TAL MLOps应用密钥，从环境变量TAL_MLOPS_APP_KEY读取
   baseURL: "http://ai-service.tal.com/openai-compatible/v1"
   timeout: 30            # 超时时间(秒)
   maxTokens: 2000        # 最大token数

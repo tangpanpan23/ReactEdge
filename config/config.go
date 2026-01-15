@@ -140,7 +140,19 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 
 // Load 加载配置
 func Load() (*Config, error) {
-	return LoadFromFile("config/app.yaml")
+	// 首先尝试加载主配置文件
+	config, err := LoadFromFile("config/app.yaml")
+	if err != nil {
+		// 如果主配置文件不存在或加载失败，尝试加载示例配置文件
+		fmt.Printf("⚠️ 主配置文件加载失败，尝试加载示例配置: %v\n", err)
+		config, err = LoadFromFile("config/app.yaml.example")
+		if err != nil {
+			fmt.Printf("⚠️ 示例配置文件也不存在，使用默认配置: %v\n", err)
+			return GetDefaultConfig(), nil
+		}
+		fmt.Println("✅ 从示例配置文件加载成功，请复制并修改为实际配置")
+	}
+	return config, nil
 }
 
 // LoadFromFile 从指定文件加载配置

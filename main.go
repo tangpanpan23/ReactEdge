@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"reactedge/config"
@@ -50,14 +52,8 @@ func main() {
 		appConfig = config.GetDefaultConfig()
 	}
 
-	// 创建HTTP服务器
-	addr := fmt.Sprintf("%s:%s", appConfig.Server.Host, appConfig.Server.Port)
-	httpServer := &http.Server{
-		Addr:         addr,
-		Handler:      server.Router(),
-		ReadTimeout:  time.Duration(appConfig.Server.ReadTimeout) * time.Second,
-		WriteTimeout: time.Duration(appConfig.Server.WriteTimeout) * time.Second,
-	}
+	// 创建HTTP服务器，并自动处理端口冲突
+	addr, httpServer := createHTTPServer(appConfig, server)
 
 	// 启动服务器
 	fmt.Printf("🚀 服务器启动在 http://%s\n", addr)
@@ -70,4 +66,59 @@ func main() {
 	} else {
 		log.Fatal(httpServer.ListenAndServe())
 	}
+}
+
+// createHTTPServer 创建HTTP服务器，自动处理端口冲突
+func createHTTPServer(appConfig *config.Config, server *web.Server) (string, *http.Server) {
+	basePort, _ := strconv.Atoi(appConfig.Server.Port)
+
+	// 尝试从基础端口开始，逐步增加直到找到可用端口
+	for port := basePort; port < basePort+100; port++ {
+		addr := fmt.Sprintf("%s:%d", appConfig.Server.Host, port)
+
+		// 检查端口是否可用
+		if isPortAvailable(addr) {
+			httpServer := &http.Server{
+				Addr:         addr,
+				Handler:      server.Router(),
+				ReadTimeout:  time.Duration(appConfig.Server.ReadTimeout) * time.Second,
+				WriteTimeout: time.Duration(appConfig.Server.WriteTimeout) * time.Second,
+			}
+			return addr, httpServer
+		}
+
+		if port == basePort {
+			fmt.Printf("⚠️ 端口 %d 被占用，尝试查找可用端口...\n", port)
+		}
+	}
+
+	// 如果没有找到可用端口，使用随机端口
+	listener, err := net.Listen("tcp", appConfig.Server.Host+":0")
+	if err != nil {
+		log.Fatalf("无法创建监听器: %v", err)
+	}
+
+	actualAddr := listener.Addr().String()
+	listener.Close() // 关闭临时监听器，http.Server会重新创建
+
+	fmt.Printf("✅ 使用随机可用端口: %s\n", actualAddr)
+
+	httpServer := &http.Server{
+		Addr:         actualAddr,
+		Handler:      server.Router(),
+		ReadTimeout:  time.Duration(appConfig.Server.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(appConfig.Server.WriteTimeout) * time.Second,
+	}
+
+	return actualAddr, httpServer
+}
+
+// isPortAvailable 检查端口是否可用
+func isPortAvailable(addr string) bool {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return false
+	}
+	listener.Close()
+	return true
 }
