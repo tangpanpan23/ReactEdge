@@ -118,18 +118,10 @@ func NewTALClient(config TALConfig) (*TALClient, error) {
 		baseURL = "http://ai-service.tal.com/openai-compatible/v1"
 	}
 
-	// 创建HTTP客户端
+	// 创建HTTP客户端 - 不设置超时，完全依赖传入的context控制超时
 	httpClient := &http.Client{}
-	var timeoutSeconds int
-	if config.Timeout > 0 {
-		timeoutSeconds = config.Timeout
-		httpClient.Timeout = time.Duration(config.Timeout) * time.Second
-	} else {
-		timeoutSeconds = 70
-		httpClient.Timeout = 70 * time.Second // 默认70秒超时
-	}
 
-	fmt.Printf("🔧 HTTP客户端超时设置: %d秒\n", timeoutSeconds)
+	fmt.Printf("🔧 HTTP客户端初始化完成，超时由context控制\n")
 
 	// 初始化OpenAI兼容客户端
 	openaiConfig := openai.DefaultConfig(authToken)
@@ -705,6 +697,16 @@ func (c *TALClient) SimulateDebate(ctx context.Context, scenario string, difficu
 
 // GenerateResponseWithModel 使用指定模型生成回答
 func (c *TALClient) GenerateResponseWithModel(ctx context.Context, prompt, model string) (string, error) {
+	// 打印输入信息
+	fmt.Printf("📝 AI推理输入:\n")
+	fmt.Printf("   模型: %s\n", model)
+	fmt.Printf("   提示长度: %d 字符\n", len(prompt))
+	if len(prompt) > 200 {
+		fmt.Printf("   提示预览: %s...\n", prompt[:200])
+	} else {
+		fmt.Printf("   完整提示: %s\n", prompt)
+	}
+
 	// 请求限流检查
 	c.requestMutex.Lock()
 	elapsed := time.Since(c.lastRequestTime)
@@ -826,6 +828,15 @@ func (c *TALClient) GenerateResponseWithModel(ctx context.Context, prompt, model
 	content, ok := message["content"].(string)
 	if !ok {
 		return "", fmt.Errorf("content字段不存在或不是字符串")
+	}
+
+	// 打印输出信息
+	fmt.Printf("📤 AI推理输出:\n")
+	fmt.Printf("   响应长度: %d 字符\n", len(content))
+	if len(content) > 200 {
+		fmt.Printf("   响应预览: %s...\n", content[:200])
+	} else {
+		fmt.Printf("   完整响应: %s\n", content)
 	}
 
 	return content, nil

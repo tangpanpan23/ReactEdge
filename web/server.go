@@ -12,6 +12,7 @@ import (
 	"reactedge/config"
 	"reactedge/internal/ai"
 	aiPkg "reactedge/pkg/ai"
+	"github.com/gorilla/websocket"
 )
 
 // Server Web服务器
@@ -20,6 +21,7 @@ type Server struct {
 	aiManager *aiPkg.Manager
 	config   *config.Config
 	router   *http.ServeMux
+	upgrader websocket.Upgrader
 }
 
 // NewServer 创建Web服务器
@@ -29,6 +31,14 @@ func NewServer(aiEngine *ai.HanStyleAI, aiManager *aiPkg.Manager, config *config
 		aiManager: aiManager,
 		config:   config,
 		router:   http.NewServeMux(),
+		upgrader: websocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+			CheckOrigin: func(r *http.Request) bool {
+				// 允许所有来源，生产环境中应该更严格
+				return true
+			},
+		},
 	}
 
 	server.setupRoutes()
@@ -46,6 +56,7 @@ func (s *Server) setupRoutes() {
 	s.router.HandleFunc("/", s.handleHome)
 	s.router.HandleFunc("/demo", s.handleDemo)
 	s.router.HandleFunc("/generate", s.handleGenerate)
+	s.router.HandleFunc("/ws", s.handleWebSocket)
 }
 
 // handleHome 首页
@@ -247,6 +258,38 @@ func (s *Server) handleDemo(w http.ResponseWriter, r *http.Request) {
             color: #2c3e50;
         }
 
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .connection-status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .connection-status.connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
         .help-text {
             font-size: 12px;
             color: #6c757d;
@@ -264,6 +307,10 @@ func (s *Server) handleDemo(w http.ResponseWriter, r *http.Request) {
 </head>
 <body>
     <div class="container">
+        <div id="connectionStatus" class="connection-status">
+            <span id="statusIndicator">🔴</span>
+            <span id="statusText">连接中...</span>
+        </div>
         <h1>🎯 职场沟通风格演示</h1>
 
     <div class="step">
@@ -312,15 +359,199 @@ func (s *Server) handleDemo(w http.ResponseWriter, r *http.Request) {
     </div>
 
     <script>
-        let abortController = null;
+        let websocket = null;
+        let isConnected = false;
+        let currentRequestId = null; // 跟踪当前请求
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function connectWebSocket() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                return; // 已经连接
+            }
+
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                updateConnectionStatus('disconnected', '🔴', '连接失败');
+                console.log('达到最大重连次数，停止重连');
+                return;
+            }
+
+            updateConnectionStatus('connecting', '🟡', '连接中...');
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = protocol + '//' + window.location.host + '/ws';
+
+            try {
+                websocket = new WebSocket(wsUrl);
+                reconnectAttempts++;
+
+                websocket.onopen = function(event) {
+                    isConnected = true;
+                    reconnectAttempts = 0; // 重置重连计数
+                    updateConnectionStatus('connected', '🟢', '已连接');
+                    console.log('WebSocket连接已建立');
+                };
+
+                // 处理pong响应
+                websocket.onpong = function(event) {
+                    console.log('收到pong响应');
+                };
+
+                websocket.onmessage = function(event) {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleWebSocketMessage(message);
+                    } catch (e) {
+                        console.error('解析WebSocket消息失败:', e);
+                    }
+                };
+
+                websocket.onclose = function(event) {
+                    isConnected = false;
+                    const wasClean = event.wasClean;
+                    console.log('WebSocket连接已关闭, clean:', wasClean, 'code:', event.code);
+
+                    // 如果有正在进行的请求，标记为失败
+                    if (currentRequestId) {
+                        const statusDiv = document.getElementById('status');
+                        const button = document.getElementById('generateBtn');
+                        const cancelBtn = document.getElementById('cancelBtn');
+
+                        statusDiv.textContent = '连接断开，请求失败';
+                        statusDiv.style.color = '#dc3545';
+                        statusDiv.className = 'error';
+
+                        // 恢复按钮状态
+                        button.textContent = '🤖 生成AI回答';
+                        button.disabled = false;
+                        cancelBtn.style.display = 'none';
+                        cancelBtn.disabled = true;
+
+                        currentRequestId = null;
+                    }
+
+                    updateConnectionStatus('disconnected', '🔴', '已断开');
+
+                    // 自动重连
+                    if (!wasClean && reconnectAttempts < maxReconnectAttempts) {
+                        setTimeout(connectWebSocket, 3000);
+                    }
+                };
+
+                websocket.onerror = function(error) {
+                    isConnected = false;
+                    console.error('WebSocket错误:', error);
+                    updateConnectionStatus('disconnected', '🔴', '连接错误');
+                };
+
+            } catch (e) {
+                console.error('创建WebSocket连接失败:', e);
+                updateConnectionStatus('disconnected', '🔴', '连接失败');
+
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    setTimeout(connectWebSocket, 5000);
+                }
+            }
+        }
+
+        function updateConnectionStatus(statusClass, indicator, text) {
+            const statusDiv = document.getElementById('connectionStatus');
+            const indicatorSpan = document.getElementById('statusIndicator');
+            const textSpan = document.getElementById('statusText');
+
+            statusDiv.className = 'connection-status ' + statusClass;
+            indicatorSpan.textContent = indicator;
+            textSpan.textContent = text;
+        }
+
+        function handleWebSocketMessage(message) {
+            const statusDiv = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+            const responseDiv = document.getElementById('response');
+            const button = document.getElementById('generateBtn');
+            const cancelBtn = document.getElementById('cancelBtn');
+
+            switch (message.type) {
+                case 'status':
+                    const data = message.data;
+                    statusDiv.textContent = data.message || '处理中...';
+                    statusDiv.style.color = '#007bff';
+                    statusDiv.className = 'loading';
+
+                    if (data.stage === 'started') {
+                        resultDiv.style.display = 'block';
+                        responseDiv.textContent = 'AI正在思考中...';
+                    }
+                    break;
+
+                case 'result':
+                    const result = message.data;
+                    const formattedResponse = formatResponse(result.response);
+                    responseDiv.innerHTML = formattedResponse;
+
+                    statusDiv.textContent = '回答生成完成 (' + result.length + ' 字符)';
+                    statusDiv.style.color = '#28a745';
+                    statusDiv.className = 'success';
+
+                    // 清理请求状态
+                    currentRequestId = null;
+
+                    // 恢复按钮状态
+                    button.textContent = '🤖 生成AI回答';
+                    button.disabled = false;
+                    cancelBtn.style.display = 'none';
+                    cancelBtn.disabled = true;
+
+                    // 滚动到结果区域
+                    resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    break;
+
+                case 'error':
+                    statusDiv.textContent = '生成失败: ' + message.data.message;
+                    statusDiv.style.color = '#dc3545';
+                    statusDiv.className = 'error';
+
+                    responseDiv.innerHTML = '<div style="color: #dc3545; padding: 15px; background: #f8d7da; border-radius: 5px; border: 1px solid #f5c6cb;"><strong>很抱歉，暂时无法生成回答</strong><br><small>' + message.data.message + '</small></div>';
+                    resultDiv.style.display = 'block';
+
+                    // 清理请求状态
+                    currentRequestId = null;
+
+                    // 恢复按钮状态
+                    button.textContent = '🤖 生成AI回答';
+                    button.disabled = false;
+                    cancelBtn.style.display = 'none';
+                    cancelBtn.disabled = true;
+                    break;
+            }
+        }
 
         function cancelRequest() {
-            if (abortController) {
-                abortController.abort();
+            if (currentRequestId) {
+                // 取消当前请求
+                currentRequestId = null;
+
                 const statusDiv = document.getElementById('status');
+                const button = document.getElementById('generateBtn');
+                const cancelBtn = document.getElementById('cancelBtn');
+
                 statusDiv.textContent = '请求已取消';
                 statusDiv.style.color = '#ffc107';
                 statusDiv.className = '';
+
+                // 恢复按钮状态
+                button.textContent = '🤖 生成AI回答';
+                button.disabled = false;
+                cancelBtn.style.display = 'none';
+                cancelBtn.disabled = true;
+
+                console.log('用户取消了当前请求');
+            } else {
+                // 如果没有正在进行的请求，关闭连接
+                if (websocket && websocket.readyState === WebSocket.OPEN) {
+                    websocket.close();
+                    updateConnectionStatus('disconnected', '🔴', '已断开');
+                }
             }
         }
 
@@ -334,13 +565,21 @@ func (s *Server) handleDemo(w http.ResponseWriter, r *http.Request) {
                 return;
             }
 
-            // 取消之前的请求
-            if (abortController) {
-                abortController.abort();
+            // 检查WebSocket连接
+            if (!isConnected || !websocket || websocket.readyState !== WebSocket.OPEN) {
+                alert('WebSocket连接未建立，请稍后重试或刷新页面');
+                connectWebSocket(); // 尝试重新连接
+                return;
             }
 
-            // 创建新的取消控制器
-            abortController = new AbortController();
+            // 如果有正在进行的请求，提示用户等待
+            if (currentRequestId) {
+                alert('有请求正在进行中，请等待完成后再试');
+                return;
+            }
+
+            // 生成请求ID
+            currentRequestId = Date.now().toString();
 
             // 显示加载状态
             const button = document.getElementById('generateBtn');
@@ -351,89 +590,39 @@ func (s *Server) handleDemo(w http.ResponseWriter, r *http.Request) {
             cancelBtn.style.display = 'inline-block';
             cancelBtn.disabled = false;
 
-            const statusDiv = document.getElementById('status');
-            const resultDiv = document.getElementById('result');
-            const responseDiv = document.getElementById('response');
-
-            // 清空之前的结果
-            responseDiv.textContent = '';
-            resultDiv.style.display = 'block';
-            statusDiv.textContent = 'AI正在分析问题和风格特点...';
-            statusDiv.style.color = '#007bff';
-            statusDiv.className = 'loading';
-
-            // 模拟进度更新
-            let progressStep = 0;
-            const progressMessages = [
-                'AI正在分析问题和风格特点...',
-                '正在构建个性化沟通策略...',
-                'AI正在生成风格化回答...',
-                '正在优化回答质量...'
-            ];
-
-            const progressInterval = setInterval(() => {
-                progressStep = (progressStep + 1) % progressMessages.length;
-                statusDiv.textContent = progressMessages[progressStep];
-            }, 3000);
-
             try {
-                // 设置120秒超时
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 120000);
+                // 发送WebSocket请求
+                const requestData = {
+                    action: 'generate',
+                    style: style,
+                    content: content,
+                    question: question,
+                    requestId: currentRequestId
+                };
 
-                const response = await fetch('/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ style, content, question }),
-                    signal: controller.signal
-                });
-
-                clearTimeout(timeoutId);
-
-                if (!response.ok) {
-                    throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-                }
-
-                const data = await response.json();
-
-                clearInterval(progressInterval);
-
-                // 美化显示结果
-                const formattedResponse = formatResponse(data.response);
-                responseDiv.innerHTML = formattedResponse;
-
-                // 滚动到结果区域
-                resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-                statusDiv.textContent = '回答生成完成 (' + data.response.length + ' 字符)';
-                statusDiv.style.color = '#28a745';
-                statusDiv.className = 'success';
+                websocket.send(JSON.stringify(requestData));
+                console.log('发送WebSocket请求:', requestData);
 
             } catch (error) {
-                clearInterval(progressInterval);
+                console.error('WebSocket请求失败:', error);
+                currentRequestId = null;
 
-                console.error('生成回答失败:', error);
+                const statusDiv = document.getElementById('status');
+                const resultDiv = document.getElementById('result');
+                const responseDiv = document.getElementById('response');
 
-                let errorMessage = error.message;
-                if (error.name === 'AbortError') {
-                    errorMessage = '请求超时，请稍后重试';
-                } else if (error.message.includes('fetch')) {
-                    errorMessage = '网络连接失败，请检查网络后重试';
-                }
-
-                statusDiv.textContent = '生成失败: ' + errorMessage;
+                statusDiv.textContent = 'WebSocket请求失败: ' + error.message;
                 statusDiv.style.color = '#dc3545';
                 statusDiv.className = 'error';
 
-                responseDiv.innerHTML = '<div style="color: #dc3545; padding: 15px; background: #f8d7da; border-radius: 5px; border: 1px solid #f5c6cb;"><strong>很抱歉，暂时无法生成回答</strong><br><small>可能的原因：AI服务暂时不可用、网络连接问题或请求超时</small><br><small>建议：请稍后重试，或检查网络连接</small></div>';
+                responseDiv.innerHTML = '<div style="color: #dc3545; padding: 15px; background: #f8d7da; border-radius: 5px; border: 1px solid #f5c6cb;"><strong>很抱歉，暂时无法生成回答</strong><br><small>WebSocket连接问题，请刷新页面重试</small></div>';
                 resultDiv.style.display = 'block';
-            } finally {
+
                 // 恢复按钮状态
                 button.textContent = originalText;
                 button.disabled = false;
                 cancelBtn.style.display = 'none';
                 cancelBtn.disabled = true;
-                abortController = null;
             }
         }
 
@@ -451,6 +640,18 @@ func (s *Server) handleDemo(w http.ResponseWriter, r *http.Request) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 generateResponse();
+            }
+        });
+
+        // 页面加载时初始化WebSocket连接
+        document.addEventListener('DOMContentLoaded', function() {
+            connectWebSocket();
+        });
+
+        // 页面卸载时关闭WebSocket连接
+        window.addEventListener('beforeunload', function() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
             }
         });
     </script>
@@ -480,7 +681,7 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 记录AI请求详情
-	fmt.Printf("📥 AI请求详情:\n", )
+	fmt.Println("📥 AI请求详情:")
 	fmt.Printf("   风格: %s\n", req.Style)
 	fmt.Printf("   经典内容: %s\n", req.Content)
 	fmt.Printf("   职场问题: %s\n", req.Question)
@@ -531,6 +732,223 @@ func (s *Server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"response": response})
+}
+
+// handleWebSocket 处理WebSocket连接
+func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// 升级HTTP连接为WebSocket
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket升级失败: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	log.Printf("新的WebSocket连接建立: %s", r.RemoteAddr)
+
+	// 设置读写超时 - 增加超时时间以适应长AI请求
+	conn.SetReadDeadline(time.Now().Add(120 * time.Second))
+	conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+
+	// 启动心跳goroutine
+	go s.handleWebSocketHeartbeat(conn)
+
+	for {
+		// 读取客户端消息
+		var msg map[string]interface{}
+		err := conn.ReadJSON(&msg)
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket错误: %v", err)
+			}
+			break
+		}
+
+		// 处理消息
+		action, ok := msg["action"].(string)
+		if !ok {
+			s.sendWebSocketError(conn, "缺少action字段")
+			continue
+		}
+
+		switch action {
+		case "generate":
+			s.handleWebSocketGenerate(conn, msg)
+		default:
+			s.sendWebSocketError(conn, "未知的action: "+action)
+		}
+	}
+}
+
+// handleWebSocketGenerate 处理WebSocket生成请求
+func (s *Server) handleWebSocketGenerate(conn *websocket.Conn, msg map[string]interface{}) {
+	// 解析请求参数
+	style, ok := msg["style"].(string)
+	if !ok {
+		s.sendWebSocketError(conn, "缺少style字段")
+		return
+	}
+
+	content, ok := msg["content"].(string)
+	if !ok {
+		s.sendWebSocketError(conn, "缺少content字段")
+		return
+	}
+
+	question, ok := msg["question"].(string)
+	if !ok {
+		s.sendWebSocketError(conn, "缺少question字段")
+		return
+	}
+
+	if question == "" {
+		s.sendWebSocketError(conn, "问题不能为空")
+		return
+	}
+
+	// 发送开始状态
+	s.sendWebSocketMessage(conn, "status", map[string]interface{}{
+		"stage":   "started",
+		"message": "AI开始分析问题...",
+	})
+
+	// 记录请求详情
+	fmt.Println("📥 WebSocket AI请求详情:")
+	fmt.Printf("   风格: %s\n", style)
+	fmt.Printf("   经典内容: %s\n", content)
+	fmt.Printf("   职场问题: %s\n", question)
+	fmt.Printf("   客户端: %s\n", conn.RemoteAddr())
+
+	// 使用goroutine异步处理AI请求
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("WebSocket处理panic: %v", r)
+				// 由于连接可能已断开，这里只记录日志，不发送错误消息
+				log.Printf("由于panic，跳过向客户端发送错误消息")
+			}
+		}()
+
+		s.processWebSocketAIRequest(conn, style, question, content)
+	}()
+}
+
+// processWebSocketAIRequest 处理WebSocket AI请求
+func (s *Server) processWebSocketAIRequest(conn *websocket.Conn, style, question, content string) {
+	// 检查连接是否仍然有效
+	if conn == nil {
+		log.Printf("WebSocket连接已断开，跳过AI处理")
+		return
+	}
+
+	// 获取AI交互超时时间
+	timeoutSeconds := 600 // 默认600秒
+	if s.config != nil && s.config.AI.InteractionTimeout > 0 {
+		timeoutSeconds = s.config.AI.InteractionTimeout
+	}
+
+	fmt.Printf("⏰ WebSocket AI交互超时设置: %d秒\n", timeoutSeconds)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+	defer cancel()
+
+	// 发送处理状态
+	s.sendWebSocketMessage(conn, "status", map[string]interface{}{
+		"stage":   "processing",
+		"message": "AI正在生成风格化回答...",
+	})
+
+	var response string
+	var err error
+
+	if s.aiManager != nil {
+		response, err = s.generateAIResponse(ctx, style, question, content)
+		if err != nil {
+			log.Printf("WebSocket AI生成回答失败: %v", err)
+
+			// 检查是否是配额错误
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "429") || strings.Contains(errMsg, "quota") {
+				log.Println("⚠️ WebSocket AI服务配额超限，已切换到本地模拟回答")
+				response = fmt.Sprintf("🤖 AI服务暂时不可用（配额限制），为您提供%s风格的本地模拟回答：\n\n%s",
+					style, s.aiEngine.GenerateStyleResponse(style, question, content))
+
+				s.sendWebSocketMessage(conn, "status", map[string]interface{}{
+					"stage":   "fallback",
+					"message": "AI服务配额限制，使用本地模拟回答",
+				})
+			} else {
+				s.sendWebSocketError(conn, "AI生成失败: "+err.Error())
+				return
+			}
+		}
+	} else {
+		// AI服务不可用，使用本地模拟回答
+		response = s.aiEngine.GenerateStyleResponse(style, question, content)
+
+		s.sendWebSocketMessage(conn, "status", map[string]interface{}{
+			"stage":   "local",
+			"message": "使用本地AI引擎生成回答",
+		})
+	}
+
+	// 发送完成状态和结果
+	s.sendWebSocketMessage(conn, "result", map[string]interface{}{
+		"response": response,
+		"length":   len(response),
+	})
+
+	fmt.Printf("📤 WebSocket AI响应详情:\n")
+	fmt.Printf("   响应长度: %d 字符\n", len(response))
+	if len(response) > 200 {
+		fmt.Printf("   响应预览: %s...\n", response[:200])
+	}
+}
+
+// sendWebSocketMessage 发送WebSocket消息
+func (s *Server) sendWebSocketMessage(conn *websocket.Conn, msgType string, data interface{}) {
+	// 检查连接是否仍然有效
+	if conn == nil {
+		log.Printf("WebSocket连接为空，跳过消息发送")
+		return
+	}
+
+	message := map[string]interface{}{
+		"type": msgType,
+		"data": data,
+		"time": time.Now().Unix(),
+	}
+
+	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err := conn.WriteJSON(message); err != nil {
+		log.Printf("WebSocket发送消息失败: %v", err)
+		// 可以考虑在这里关闭连接或标记连接为无效
+		// 但由于这是异步处理的，不在这里处理连接管理
+	}
+}
+
+// sendWebSocketError 发送WebSocket错误消息
+func (s *Server) sendWebSocketError(conn *websocket.Conn, errorMsg string) {
+	s.sendWebSocketMessage(conn, "error", map[string]interface{}{
+		"message": errorMsg,
+	})
+}
+
+// handleWebSocketHeartbeat 处理WebSocket心跳
+func (s *Server) handleWebSocketHeartbeat(conn *websocket.Conn) {
+	ticker := time.NewTicker(30 * time.Second) // 每30秒发送一次心跳
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// 发送ping消息
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				log.Printf("发送心跳失败: %v", err)
+				return
+			}
+		}
+	}
 }
 
 // generateAIResponse 使用AI服务生成风格化回答
