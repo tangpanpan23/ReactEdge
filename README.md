@@ -420,6 +420,21 @@ AI风格模仿的准确度直接取决于训练素材的数量和质量：
 
 ### 运行程序
 
+#### 方法1：自动配置（推荐）
+
+```bash
+# 克隆项目
+cd /path/to/ReactEdge
+
+# 自动配置项目
+./setup.sh
+
+# 运行项目
+./run.sh
+```
+
+#### 方法2：手动配置
+
 ```bash
 # 克隆项目
 cd /path/to/ReactEdge
@@ -431,14 +446,28 @@ cp config/ai.yaml.example config/ai.yaml
 # 2. 根据需要修改配置文件
 # 编辑 config/app.yaml 和 config/ai.yaml
 
-# 3. 运行程序 (默认从配置文件读取)
+# 3. 运行程序
 go run .
 
 # 或者通过环境变量覆盖
 SERVER_PORT=6001 AI_MODE=external go run .
-
-# 访问 http://localhost:6000 开始体验
 ```
+
+#### 配置说明
+
+⚠️ **重要安全提醒**：
+- 配置文件已被添加到 `.gitignore`，不会被提交到版本控制系统
+- 请勿在配置文件中填写真实的API密钥
+- 建议使用环境变量设置敏感信息
+
+```bash
+# 环境变量设置示例
+export TAL_MLOPS_APP_ID="your-tal-app-id"
+export TAL_MLOPS_APP_KEY="your-tal-app-key"
+export SERVER_PORT=6001
+```
+
+访问 http://localhost:6000 开始体验
 
 ### 使用说明
 
