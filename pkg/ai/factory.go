@@ -81,7 +81,7 @@ func (f *AIFactory) GetRecommendedProvider(taskType string) ProviderType {
 	// 根据任务类型推荐最适合的服务商
 	switch taskType {
 	case "advanced_reasoning":
-		// 复杂推理任务优先使用TAL的qwen3-max
+		// 复杂推理任务优先使用TAL的qwen-flash（更稳定，避免配额限制）
 		if mode == "internal" && f.isTALAvailable() {
 			return ProviderTAL
 		}

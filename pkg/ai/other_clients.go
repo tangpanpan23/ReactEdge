@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -47,6 +50,36 @@ func (c *OpenAIClient) ValidateModel(model string) bool {
 	return false
 }
 
+// GenerateResponseWithModel 使用指定模型生成回答
+func (c *OpenAIClient) GenerateResponseWithModel(ctx context.Context, prompt, model string) (string, error) {
+	req := openai.ChatCompletionRequest{
+		Model: model,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: "You are a helpful assistant. Provide clear, accurate, and concise responses.",
+			},
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: prompt,
+			},
+		},
+		MaxTokens:   2000,
+		Temperature: 0.7,
+	}
+
+	resp, err := c.client.CreateChatCompletion(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("OpenAI API调用失败: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("OpenAI API未返回结果")
+	}
+
+	return resp.Choices[0].Message.Content, nil
+}
+
 func (c *OpenAIClient) AnalyzeImage(ctx context.Context, imageURL, prompt string) (*ImageAnalysisResult, error) {
 	model := c.GetModelForTask("image_analysis")
 
@@ -77,11 +110,11 @@ func (c *OpenAIClient) AnalyzeImage(ctx context.Context, imageURL, prompt string
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultImageAnalysis(imageURL, prompt), nil
+		return getDefaultImageAnalysis(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultImageAnalysis(imageURL, prompt), nil
+		return getDefaultImageAnalysis(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -137,17 +170,17 @@ func (c *OpenAIClient) GenerateQuestions(ctx context.Context, contextInfo string
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultQuestions(category), nil
+		return getDefaultQuestions(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultQuestions(category), nil
+		return getDefaultQuestions(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
 	questions := parseQuestionsFromJSON(content)
 	if len(questions) == 0 {
-		return c.getDefaultQuestions(category), nil
+		return getDefaultQuestions(), nil
 	}
 
 	return questions, nil
@@ -197,11 +230,11 @@ func (c *OpenAIClient) PolishNote(ctx context.Context, rawContent, contextInfo s
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultPolishedNote(rawContent, contextInfo), nil
+		return getDefaultPolishedNote(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultPolishedNote(rawContent, contextInfo), nil
+		return getDefaultPolishedNote(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -248,11 +281,11 @@ func (c *OpenAIClient) PolishNote(ctx context.Context, rawContent, contextInfo s
 
 func (c *OpenAIClient) TextToSpeech(ctx context.Context, text, voice, language string, speed float64) ([]byte, string, error) {
 	// OpenAI TTS 简化实现
-	return c.getDefaultAudioData(text), "wav", nil
+	return getDefaultAudioData(), "wav", nil
 }
 
 func (c *OpenAIClient) AnalyzeVideo(ctx context.Context, videoData []byte, format, analysisType string, duration float64) (*VideoAnalysis, error) {
-	return c.getDefaultVideoAnalysis(), nil
+	return getDefaultVideoAnalysis(), nil
 }
 
 func (c *OpenAIClient) GenerateVideo(ctx context.Context, script, style string, duration float64, scenes []string, voice, language string) ([]byte, string, float64, *VideoMetadata, error) {
@@ -297,11 +330,11 @@ func (c *OpenAIClient) GenerateReactionTemplates(ctx context.Context, scenario, 
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultReactionTemplates(scenario, style), nil
+		return getDefaultReactionTemplates(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultReactionTemplates(scenario, style), nil
+		return getDefaultReactionTemplates(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -324,7 +357,7 @@ func (c *OpenAIClient) GenerateReactionTemplates(ctx context.Context, scenario, 
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &result); err != nil {
-		return c.getDefaultReactionTemplates(scenario, style), nil
+		return getDefaultReactionTemplates(), nil
 	}
 
 	return result.Templates, nil
@@ -359,11 +392,11 @@ func (c *OpenAIClient) AnalyzeExpressionStyle(ctx context.Context, personName st
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultStyleAnalysis(personName), nil
+		return getDefaultStyleAnalysis(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultStyleAnalysis(personName), nil
+		return getDefaultStyleAnalysis(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -382,7 +415,7 @@ func (c *OpenAIClient) AnalyzeExpressionStyle(ctx context.Context, personName st
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &result); err != nil {
-		return c.getDefaultStyleAnalysis(personName), nil
+		return getDefaultStyleAnalysis(), nil
 	}
 
 	return &result, nil
@@ -419,11 +452,11 @@ func (c *OpenAIClient) SimulateDebate(ctx context.Context, scenario string, diff
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultDebateSimulation(scenario, difficulty, userStyle), nil
+		return getDefaultDebateSimulation(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultDebateSimulation(scenario, difficulty, userStyle), nil
+		return getDefaultDebateSimulation(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -442,7 +475,7 @@ func (c *OpenAIClient) SimulateDebate(ctx context.Context, scenario string, diff
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &result); err != nil {
-		return c.getDefaultDebateSimulation(scenario, difficulty, userStyle), nil
+		return getDefaultDebateSimulation(), nil
 	}
 
 	return &result, nil
@@ -480,11 +513,11 @@ func (c *OpenAIClient) EvaluateReaction(ctx context.Context, userResponse, scena
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultReactionEvaluation(), nil
+		return getDefaultReactionEvaluation(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultReactionEvaluation(), nil
+		return getDefaultReactionEvaluation(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -503,7 +536,7 @@ func (c *OpenAIClient) EvaluateReaction(ctx context.Context, userResponse, scena
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &result); err != nil {
-		return c.getDefaultReactionEvaluation(), nil
+		return getDefaultReactionEvaluation(), nil
 	}
 
 	return &result, nil
@@ -744,23 +777,23 @@ func (c *ClaudeClient) ValidateModel(model string) bool {
 }
 
 func (c *ClaudeClient) AnalyzeImage(ctx context.Context, imageURL, prompt string) (*ImageAnalysisResult, error) {
-	return c.getDefaultImageAnalysis(imageURL, prompt), nil
+	return getDefaultImageAnalysis(), nil
 }
 
 func (c *ClaudeClient) GenerateQuestions(ctx context.Context, contextInfo string, category string) ([]Question, error) {
-	return c.getDefaultQuestions(category), nil
+	return getDefaultQuestions(), nil
 }
 
 func (c *ClaudeClient) PolishNote(ctx context.Context, rawContent, contextInfo string) (*PolishedNote, error) {
-	return c.getDefaultPolishedNote(rawContent, contextInfo), nil
+	return getDefaultPolishedNote(), nil
 }
 
 func (c *ClaudeClient) TextToSpeech(ctx context.Context, text, voice, language string, speed float64) ([]byte, string, error) {
-	return c.getDefaultAudioData(text), "wav", nil
+	return getDefaultAudioData(), "wav", nil
 }
 
 func (c *ClaudeClient) AnalyzeVideo(ctx context.Context, videoData []byte, format, analysisType string, duration float64) (*VideoAnalysis, error) {
-	return c.getDefaultVideoAnalysis(), nil
+	return getDefaultVideoAnalysis(), nil
 }
 
 func (c *ClaudeClient) GenerateVideo(ctx context.Context, script, style string, duration float64, scenes []string, voice, language string) ([]byte, string, float64, *VideoMetadata, error) {
@@ -1342,4 +1375,175 @@ func (c *BaiduClient) generateMockMP4Data(script string, metadata *VideoMetadata
 	}
 
 	return videoData
+}
+
+// SparkClient 星火AI客户端
+type SparkClient struct {
+	*BaseClient
+	config     *SparkConfig
+	httpClient *http.Client
+}
+
+// NewSparkClient 创建星火AI客户端
+func NewSparkClient(config SparkConfig) (*SparkClient, error) {
+	httpClient := &http.Client{}
+	if config.Timeout > 0 {
+		httpClient.Timeout = time.Duration(config.Timeout) * time.Second
+	} else {
+		httpClient.Timeout = 300 * time.Second // 默认5分钟超时
+	}
+
+	return &SparkClient{
+		BaseClient: &BaseClient{
+			provider: ProviderSpark,
+		},
+		config:     &config,
+		httpClient: httpClient,
+	}, nil
+}
+
+// GetAvailableModels 获取支持的模型列表
+func (c *SparkClient) GetAvailableModels() []string {
+	return []string{c.config.Model}
+}
+
+// ValidateModel 验证模型是否支持
+func (c *SparkClient) ValidateModel(model string) bool {
+	return model == c.config.Model
+}
+
+// GenerateResponseWithModel 使用指定模型生成回答
+func (c *SparkClient) GenerateResponseWithModel(ctx context.Context, prompt, model string) (string, error) {
+	// 使用HTTP API而不是WebSocket（更稳定）
+	url := "https://spark-api-open.xf-yun.com/v2/chat/completions"
+
+	// 准备请求体
+	requestBody := map[string]interface{}{
+		"model": c.config.Model,
+		"user":  "reactedge-user",
+		"messages": []map[string]interface{}{
+			{
+				"role":    "system",
+				"content": "You are a helpful assistant. Provide clear, accurate, and concise responses.",
+			},
+			{
+				"role":    "user",
+				"content": prompt,
+			},
+		},
+		"temperature": c.config.Temperature,
+		"max_tokens":  c.config.MaxTokens,
+		"stream":      false,
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("构建请求失败: %w", err)
+	}
+
+	// 创建HTTP请求
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(jsonData)))
+	if err != nil {
+		return "", fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	// 设置请求头
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s:%s", c.config.APIKey, c.config.APISecret))
+
+	// 发送请求
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("发送请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("星火API错误 (状态码: %d): %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	// 提取回答内容
+	choices, ok := response["choices"].([]interface{})
+	if !ok || len(choices) == 0 {
+		return "", fmt.Errorf("响应中没有找到choices字段")
+	}
+
+	choice, ok := choices[0].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("choice格式不正确")
+	}
+
+	message, ok := choice["message"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("message格式不正确")
+	}
+
+	content, ok := message["content"].(string)
+	if !ok {
+		return "", fmt.Errorf("content字段不存在或不是字符串")
+	}
+
+	return content, nil
+}
+
+// AnalyzeImage 图像分析（星火AI不支持，返回默认结果）
+func (c *SparkClient) AnalyzeImage(ctx context.Context, imageURL, prompt string) (*ImageAnalysisResult, error) {
+	return getDefaultImageAnalysis(), nil
+}
+
+// GenerateQuestions 生成问题（星火AI不支持，返回默认结果）
+func (c *SparkClient) GenerateQuestions(ctx context.Context, contextInfo string, category string) ([]Question, error) {
+	return getDefaultQuestions(), nil
+}
+
+// PolishNote 润色笔记（星火AI不支持，返回默认结果）
+func (c *SparkClient) PolishNote(ctx context.Context, rawContent, contextInfo string) (*PolishedNote, error) {
+	return getDefaultPolishedNote(), nil
+}
+
+// TextToSpeech 文本转语音（星火AI不支持，返回默认结果）
+func (c *SparkClient) TextToSpeech(ctx context.Context, text, voice, language string, speed float64) ([]byte, string, error) {
+	return getDefaultAudioData(), "audio/wav", nil
+}
+
+// AnalyzeVideo 视频分析（星火AI不支持，返回默认结果）
+func (c *SparkClient) AnalyzeVideo(ctx context.Context, videoData []byte, format, analysisType string, duration float64) (*VideoAnalysis, error) {
+	return getDefaultVideoAnalysis(), nil
+}
+
+// GenerateVideo 生成视频（星火AI不支持，返回默认结果）
+func (c *SparkClient) GenerateVideo(ctx context.Context, script, style string, duration float64, scenes []string, voice, language string) ([]byte, string, float64, *VideoMetadata, error) {
+	return getDefaultVideoData(), "video/mp4", duration, getDefaultVideoMetadata(), nil
+}
+
+// GenerateReactionTemplates 生成反应模板（星火AI不支持，返回默认结果）
+func (c *SparkClient) GenerateReactionTemplates(ctx context.Context, scenario, style string) ([]ReactionTemplate, error) {
+	return getDefaultReactionTemplates(), nil
+}
+
+// AnalyzeExpressionStyle 分析表达风格（星火AI不支持，返回默认结果）
+func (c *SparkClient) AnalyzeExpressionStyle(ctx context.Context, personName string, sampleText string) (*StyleAnalysis, error) {
+	return getDefaultStyleAnalysis(), nil
+}
+
+// SimulateDebate 模拟辩论（星火AI不支持，返回默认结果）
+func (c *SparkClient) SimulateDebate(ctx context.Context, scenario string, difficulty int, userStyle string) (*DebateSimulation, error) {
+	return getDefaultDebateSimulation(), nil
+}
+
+// EvaluateReaction 评估反应（星火AI不支持，返回默认结果）
+func (c *SparkClient) EvaluateReaction(ctx context.Context, userResponse, scenario, expectedStyle string) (*ReactionEvaluation, error) {
+	return getDefaultReactionEvaluation(), nil
 }

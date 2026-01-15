@@ -58,13 +58,23 @@ func main() {
 	// 启动服务器
 	fmt.Printf("🚀 服务器启动在 http://%s\n", addr)
 	fmt.Println("🎯 开始你的职场沟通风格探索之旅！")
-	fmt.Printf("   AI模式: %s，使用qwen3-max模型进行推理\n", appConfig.AI.Mode)
+	if appConfig.AI.Mode == "internal" {
+		fmt.Printf("   AI模式: %s，使用TAL(deepseek-reasoner)进行推理\n", appConfig.AI.Mode)
+	} else {
+		fmt.Printf("   AI模式: %s，使用星火AI(spark-x)进行推理\n", appConfig.AI.Mode)
+	}
+	fmt.Printf("   AI交互超时: %d秒\n", appConfig.AI.InteractionTimeout)
 
 	if appConfig.Server.TLSEnabled && appConfig.Server.TLSCertFile != "" && appConfig.Server.TLSKeyFile != "" {
 		fmt.Println("🔒 HTTPS模式已启用")
+		fmt.Printf("📡 尝试启动HTTPS服务器在: %s\n", addr)
 		log.Fatal(httpServer.ListenAndServeTLS(appConfig.Server.TLSCertFile, appConfig.Server.TLSKeyFile))
 	} else {
-		log.Fatal(httpServer.ListenAndServe())
+		fmt.Printf("📡 尝试启动HTTP服务器在: %s\n", addr)
+		if err := httpServer.ListenAndServe(); err != nil {
+			fmt.Printf("❌ 服务器启动失败: %v\n", err)
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -72,18 +82,23 @@ func main() {
 func createHTTPServer(appConfig *config.Config, server *web.Server) (string, *http.Server) {
 	basePort, _ := strconv.Atoi(appConfig.Server.Port)
 
-	// 尝试从基础端口开始，逐步增加直到找到可用端口
+	// 尝试从基础端口开始，逐步增加直到成功绑定
 	for port := basePort; port < basePort+100; port++ {
 		addr := fmt.Sprintf("%s:%d", appConfig.Server.Host, port)
 
-		// 检查端口是否可用
-		if isPortAvailable(addr) {
-			httpServer := &http.Server{
-				Addr:         addr,
-				Handler:      server.Router(),
-				ReadTimeout:  time.Duration(appConfig.Server.ReadTimeout) * time.Second,
-				WriteTimeout: time.Duration(appConfig.Server.WriteTimeout) * time.Second,
-			}
+		// 直接尝试创建HTTP服务器并监听，如果成功则返回
+		httpServer := &http.Server{
+			Addr:         addr,
+			Handler:      server.Router(),
+			ReadTimeout:  time.Duration(appConfig.Server.ReadTimeout) * time.Second,
+			WriteTimeout: time.Duration(appConfig.Server.WriteTimeout) * time.Second,
+		}
+
+		// 尝试监听端口
+		listener, err := net.Listen("tcp", addr)
+		if err == nil {
+			// 成功绑定，关闭临时监听器让http.Server使用
+			listener.Close()
 			return addr, httpServer
 		}
 
@@ -92,7 +107,7 @@ func createHTTPServer(appConfig *config.Config, server *web.Server) (string, *ht
 		}
 	}
 
-	// 如果没有找到可用端口，使用随机端口
+	// 如果没有找到可用端口，使用系统分配的随机端口
 	listener, err := net.Listen("tcp", appConfig.Server.Host+":0")
 	if err != nil {
 		log.Fatalf("无法创建监听器: %v", err)
@@ -111,14 +126,4 @@ func createHTTPServer(appConfig *config.Config, server *web.Server) (string, *ht
 	}
 
 	return actualAddr, httpServer
-}
-
-// isPortAvailable 检查端口是否可用
-func isPortAvailable(addr string) bool {
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return false
-	}
-	listener.Close()
-	return true
 }

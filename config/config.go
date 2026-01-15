@@ -31,13 +31,15 @@ type ServerConfig struct {
 
 // AIConfig AI配置
 type AIConfig struct {
-	Mode            string               `yaml:"mode" json:"mode"`
-	MaxAnalysisTime int                  `yaml:"max_analysis_time" json:"max_analysis_time"`
-	CacheEnabled    bool                 `yaml:"cache_enabled" json:"cache_enabled"`
-	Cache           CacheConfig          `yaml:"cache" json:"cache"`
-	CircuitBreaker  CircuitBreakerConfig `yaml:"circuit_breaker" json:"circuit_breaker"`
-	Concurrency     ConcurrencyConfig    `yaml:"concurrency" json:"concurrency"`
-	RateLimit       RateLimitConfig      `yaml:"rate_limit" json:"rate_limit"`
+	Mode               string               `yaml:"mode" json:"mode"`
+	MaxAnalysisTime    int                  `yaml:"max_analysis_time" json:"max_analysis_time"`
+	InteractionTimeout int                  `yaml:"interaction_timeout" json:"interaction_timeout"`
+	CacheEnabled       bool                 `yaml:"cache_enabled" json:"cache_enabled"`
+	Cache              CacheConfig          `yaml:"cache" json:"cache"`
+	CircuitBreaker     CircuitBreakerConfig `yaml:"circuit_breaker" json:"circuit_breaker"`
+	Concurrency        ConcurrencyConfig    `yaml:"concurrency" json:"concurrency"`
+	RateLimit          RateLimitConfig      `yaml:"rate_limit" json:"rate_limit"`
+	AIRateLimit        AIRateLimitConfig    `yaml:"ai_rate_limit" json:"ai_rate_limit"`
 }
 
 // CacheConfig 缓存配置
@@ -61,6 +63,14 @@ type ConcurrencyConfig struct {
 type RateLimitConfig struct {
 	RequestsPerHour int `yaml:"requests_per_hour" json:"requests_per_hour"`
 	BurstLimit      int `yaml:"burst_limit" json:"burst_limit"`
+}
+
+// AIRateLimitConfig AI请求限流配置
+type AIRateLimitConfig struct {
+	MinRequestInterval int  `yaml:"min_request_interval" json:"min_request_interval"`
+	RequestTimeout     int  `yaml:"request_timeout" json:"request_timeout"`
+	EnableRetry        bool `yaml:"enable_retry" json:"enable_retry"`
+	RetryWaitTime      int  `yaml:"retry_wait_time" json:"retry_wait_time"`
 }
 
 // LoggingConfig 日志配置
@@ -195,9 +205,10 @@ func GetDefaultConfig() *Config {
 			TLSEnabled:   false,
 		},
 		AI: AIConfig{
-			Mode:            "internal",
-			MaxAnalysisTime: 60,
-			CacheEnabled:    true,
+			Mode:               "internal",
+			MaxAnalysisTime:    60,
+			InteractionTimeout: 600, // 10分钟AI交互超时
+			CacheEnabled:       true,
 			Cache: CacheConfig{
 				TTL:        3600,
 				MaxEntries: 1000,
@@ -212,6 +223,12 @@ func GetDefaultConfig() *Config {
 			RateLimit: RateLimitConfig{
 				RequestsPerHour: 1000,
 				BurstLimit:      100,
+			},
+			AIRateLimit: AIRateLimitConfig{
+				MinRequestInterval: 1,
+				RequestTimeout:     60,
+				EnableRetry:        true,
+				RetryWaitTime:      5,
 			},
 		},
 		Logging: LoggingConfig{

@@ -171,7 +171,7 @@ type EvaluationItem struct {
 // 默认实现方法
 
 // getDefaultImageAnalysis 默认图像分析结果
-func (c *TALClient) getDefaultImageAnalysis(imageURL, prompt string) *ImageAnalysisResult {
+func getDefaultImageAnalysis() *ImageAnalysisResult {
 	return &ImageAnalysisResult{
 		ObjectName:     "分析对象",
 		Category:       "general",
@@ -183,55 +183,32 @@ func (c *TALClient) getDefaultImageAnalysis(imageURL, prompt string) *ImageAnaly
 }
 
 // getDefaultQuestions 默认问题列表
-func (c *TALClient) getDefaultQuestions(category string) []Question {
-	switch category {
-	case "debate":
-		return []Question{
-			{
-				Content:    "面对对方质疑时，你会如何回应？",
-				Type:       "scenario",
-				Difficulty: "basic",
-				Purpose:    "练习基础反应能力",
-			},
-			{
-				Content:    "如何在保持立场的同时缓和气氛？",
-				Type:       "strategy",
-				Difficulty: "intermediate",
-				Purpose:    "学习策略性沟通",
-			},
-			{
-				Content:    "面对情绪化的对手，如何控制对话节奏？",
-				Type:       "evaluation",
-				Difficulty: "advanced",
-				Purpose:    "提升高级沟通技巧",
-			},
-		}
-	default:
-		return []Question{
-			{
-				Content:    "在这个沟通场景中，你的第一反应是什么？",
-				Type:       "scenario",
-				Difficulty: "basic",
-				Purpose:    "建立反应意识",
-			},
-			{
-				Content:    "如何用不同的风格表达同样的观点？",
-				Type:       "strategy",
-				Difficulty: "intermediate",
-				Purpose:    "练习风格切换",
-			},
-			{
-				Content:    "面对复杂情况，如何快速做出有效反应？",
-				Type:       "evaluation",
-				Difficulty: "advanced",
-				Purpose:    "提升综合能力",
-			},
-		}
+func getDefaultQuestions() []Question {
+	// 返回固定的默认问题列表
+	return []Question{
+		{
+			Content:    "在这个沟通场景中，你的第一反应是什么？",
+			Type:       "scenario",
+			Difficulty: "basic",
+			Purpose:    "建立反应意识",
+		},
+		{
+			Content:    "如何用不同的风格表达同样的观点？",
+			Type:       "strategy",
+			Difficulty: "intermediate",
+			Purpose:    "练习风格切换",
+		},
+		{
+			Content:    "面对复杂情况，如何快速做出有效反应？",
+			Type:       "evaluation",
+			Difficulty: "advanced",
+			Purpose:    "提升综合能力",
+		},
 	}
 }
 
 // getDefaultPolishedNote 默认润色结果
-func (c *TALClient) getDefaultPolishedNote(rawContent, contextInfo string) *PolishedNote {
+func getDefaultPolishedNote() *PolishedNote {
 	return &PolishedNote{
 		Title:         "反应训练记录",
 		Summary:       "这是反应训练的记录总结",
@@ -239,12 +216,12 @@ func (c *TALClient) getDefaultPolishedNote(rawContent, contextInfo string) *Poli
 		CommunicationTips: []string{"注意倾听", "清晰表达", "保持礼貌"},
 		Questions:     []string{"还有哪些地方可以改进？"},
 		Improvements:  []string{"增加练习频率", "尝试不同场景"},
-		FormattedText: rawContent,
+		FormattedText: "这是润色后的内容。由于AI服务暂时不可用，这里提供一个模拟的润色结果。在实际环境中，这个结果将由AI模型生成。",
 	}
 }
 
 // getDefaultVideoAnalysis 默认视频分析结果
-func (c *TALClient) getDefaultVideoAnalysis() *VideoAnalysis {
+func getDefaultVideoAnalysis() *VideoAnalysis {
 	return &VideoAnalysis{
 		Scenes: []*SceneAnalysis{
 			{
@@ -292,7 +269,7 @@ func (c *TALClient) generateMockVideo(script, style string, duration float64, sc
 }
 
 // getDefaultReactionTemplates 默认反应模板
-func (c *TALClient) getDefaultReactionTemplates(scenario, style string) []ReactionTemplate {
+func getDefaultReactionTemplates() []ReactionTemplate {
 	return []ReactionTemplate{
 		{
 			Scenario: "领导质疑项目进展",
@@ -326,9 +303,9 @@ func (c *TALClient) getDefaultReactionTemplates(scenario, style string) []Reacti
 }
 
 // getDefaultStyleAnalysis 默认风格分析
-func (c *TALClient) getDefaultStyleAnalysis(personName string) *StyleAnalysis {
+func getDefaultStyleAnalysis() *StyleAnalysis {
 	return &StyleAnalysis{
-		PersonName: personName,
+		PersonName: "康辉",
 		LanguageFeatures: map[string]interface{}{
 			"vocabulary": "专业术语丰富",
 			"sentence_structure": "逻辑清晰",
@@ -351,9 +328,9 @@ func (c *TALClient) getDefaultStyleAnalysis(personName string) *StyleAnalysis {
 }
 
 // getDefaultDebateSimulation 默认辩论模拟
-func (c *TALClient) getDefaultDebateSimulation(scenario string, difficulty int, userStyle string) *DebateSimulation {
+func getDefaultDebateSimulation() *DebateSimulation {
 	return &DebateSimulation{
-		Scenario:        scenario,
+		Scenario:        "项目方案讨论",
 		OpponentOpening: "我认为这个方案有很大问题...",
 		InteractionRounds: []DebateRound{
 			{
@@ -365,12 +342,12 @@ func (c *TALClient) getDefaultDebateSimulation(scenario string, difficulty int, 
 		},
 		KeyReactionPoints: []string{"数据支撑", "逻辑推理", "风格一致"},
 		StyleSuggestions: []string{"保持冷静", "用事实说话", "寻求共赢"},
-		Difficulty: difficulty,
+		Difficulty: 2,
 	}
 }
 
 // getDefaultReactionEvaluation 默认反应评估
-func (c *TALClient) getDefaultReactionEvaluation() *ReactionEvaluation {
+func getDefaultReactionEvaluation() *ReactionEvaluation {
 	return &ReactionEvaluation{
 		ContentQuality: EvaluationItem{
 			Score:       7.5,
@@ -399,7 +376,7 @@ func (c *TALClient) getDefaultReactionEvaluation() *ReactionEvaluation {
 }
 
 // getDefaultAudioData 生成默认音频数据
-func (c *TALClient) getDefaultAudioData(text string) []byte {
+func getDefaultAudioData() []byte {
 	// 生成一个简单的WAV文件头部 + 模拟音频数据
 	wavHeader := []byte{
 		0x52, 0x49, 0x46, 0x46, // "RIFF"
@@ -559,4 +536,20 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// getDefaultVideoData 默认视频数据
+func getDefaultVideoData() []byte {
+	// 返回一个小的模拟视频数据
+	return []byte{0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32, 0x00, 0x00, 0x00, 0x00}
+}
+
+// getDefaultVideoMetadata 默认视频元数据
+func getDefaultVideoMetadata() *VideoMetadata {
+	return &VideoMetadata{
+		Title:       "模拟视频",
+		Description: "由于AI服务暂时不可用，这里提供一个模拟的视频结果。在实际环境中，这个结果将由AI模型生成。",
+		Scenes:      []string{"场景1", "场景2"},
+		Resolution:  "1920x1080",
+	}
 }

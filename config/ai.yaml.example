@@ -8,28 +8,28 @@
 # 4. 敏感信息请妥善保管，不要提交到版本控制系统
 
 # AI模式配置：internal(对内使用TAL) 或 external(对外使用开放模型)
-aiMode: "internal"  # 对内环境默认使用TAL AI模型
+aiMode: "external"  # 外部环境默认使用开放AI模型
 
 # 默认服务商配置
-defaultProvider: "tal"  # 可选值: tal, openai, claude, azure, baidu
+defaultProvider: "spark"  # 可选值: tal, openai, claude, azure, baidu, spark
 
 # TAL内部AI服务配置（企业内部使用）
 tal:
   talMLOpsAppId: "your-tal-app-id"      # TAL MLOps应用ID，从环境变量TAL_MLOPS_APP_ID读取
   talMLOpsAppKey: "your-tal-app-key"    # TAL MLOps应用密钥，从环境变量TAL_MLOPS_APP_KEY读取
   baseURL: "http://ai-service.tal.com/openai-compatible/v1"
-  timeout: 30            # 超时时间(秒)
+  timeout: 90            # 超时时间(秒)，推理模型需要更长时间
   maxTokens: 2000        # 最大token数
   temperature: 0.7       # 温度参数(0.0-1.0)
 
-  # TAL AI模型映射
+  # TAL AI模型映射 (基于当前可用模型)
   models:
-    imageAnalysis: "qwen3-vl-plus"        # 图像分析 (视觉理解，支持思考模式)
-    textGeneration: "qwen-flash"          # 文本生成 (思考+非思考模式融合)
-    advancedReasoning: "qwen3-max"        # 复杂推理 (智能体优化)
-    voiceInteraction: "qwen3-omni-flash"  # 语音交互 (多模态语音处理)
-    videoAnalysis: "qwen3-omni-flash"     # 视频分析
-    videoGeneration: "doubao-seedance-1.0-lite-i2v"  # 视频生成
+    imageAnalysis: "gpt-4o"               # 图像分析 (GPT-4o支持多模态)
+    textGeneration: "deepseek-chat"       # 文本生成 (Deepseek Chat通用文本生成)
+    advancedReasoning: "deepseek-reasoner" # 复杂推理 (Deepseek Reasoner推理能力强)
+    voiceInteraction: "gpt-4o"            # 语音交互 (GPT-4o支持多模态)
+    videoAnalysis: "gpt-4o"               # 视频分析 (GPT-4o支持多模态)
+    videoGeneration: "doubao-pro-128k"    # 视频生成 (Doubao模型支持)
 
 # OpenAI配置
 openai:
@@ -82,3 +82,13 @@ baidu:
   timeout: 30
   maxTokens: 2000
   temperature: 0.7
+
+# 星火AI配置（推荐用于外部环境）
+spark:
+  appId: "your-spark-app-id"       # 星火应用ID，从环境变量SPARK_APP_ID读取
+  apiKey: "your-spark-api-key"     # 星火API Key，从环境变量SPARK_API_KEY读取
+  apiSecret: "your-spark-api-secret" # 星火API Secret，从环境变量SPARK_API_SECRET读取
+  model: "spark-x"                 # 星火模型，目前支持spark-x (X1.5模型)
+  timeout: 300                     # 超时时间(秒)，星火响应较慢
+  maxTokens: 4096                  # 最大token数
+  temperature: 0.7                 # 温度参数

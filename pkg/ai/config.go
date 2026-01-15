@@ -26,6 +26,7 @@ type Config struct {
 	Azure   AzureConfig   `json:"azure" yaml:"azure"`
 	Baidu   BaiduConfig   `json:"baidu" yaml:"baidu"`
 	TAL     TALConfig     `json:"tal" yaml:"tal"`
+	Spark   SparkConfig   `json:"spark" yaml:"spark"`
 }
 
 // OpenAIConfig OpenAI兼容服务配置
@@ -85,6 +86,17 @@ type TALConfig struct {
 	Models ModelMapping `json:"models" yaml:"models"`
 }
 
+// SparkConfig 星火AI配置
+type SparkConfig struct {
+	AppID      string  `json:"appId" yaml:"appId"`
+	APIKey     string  `json:"apiKey" yaml:"apiKey"`
+	APISecret  string  `json:"apiSecret" yaml:"apiSecret"`
+	Model      string  `json:"model" yaml:"model"`
+	Timeout    int     `json:"timeout" yaml:"timeout"`
+	MaxTokens  int     `json:"maxTokens" yaml:"maxTokens"`
+	Temperature float32 `json:"temperature" yaml:"temperature"`
+}
+
 // ModelMapping 模型映射配置
 type ModelMapping struct {
 	ImageAnalysis     string `json:"imageAnalysis" yaml:"imageAnalysis"`
@@ -104,6 +116,7 @@ const (
 	ProviderAzure  ProviderType = "azure"
 	ProviderBaidu  ProviderType = "baidu"
 	ProviderTAL    ProviderType = "tal"
+	ProviderSpark  ProviderType = "spark"
 )
 
 // DefaultConfig 返回默认配置
@@ -117,12 +130,12 @@ func DefaultConfig() *Config {
 			MaxTokens:   2000,
 			Temperature: 0.7,
 			Models: ModelMapping{
-				ImageAnalysis:     "qwen3-vl-plus",
-				TextGeneration:    "qwen-flash",
-				AdvancedReasoning: "qwen3-max",
-				VoiceInteraction:  "qwen3-omni-flash",
-				VideoAnalysis:     "qwen3-omni-flash",
-				VideoGeneration:   "doubao-seedance-1.0-lite-i2v",
+				ImageAnalysis:     "gpt-4o",           // GPT-4o支持多模态
+				TextGeneration:    "deepseek-chat",    // Deepseek Chat通用文本生成
+				AdvancedReasoning: "deepseek-reasoner", // Deepseek Reasoner推理能力强
+				VoiceInteraction:  "gpt-4o",           // GPT-4o支持多模态
+				VideoAnalysis:     "gpt-4o",           // GPT-4o支持多模态
+				VideoGeneration:   "doubao-pro-128k",  // Doubao模型支持
 			},
 		},
 		OpenAI: OpenAIConfig{
@@ -202,7 +215,7 @@ func validateAIConfig(config *Config) error {
 	}
 
 	// 验证默认服务商
-	validProviders := []string{string(ProviderTAL), string(ProviderOpenAI), string(ProviderClaude), string(ProviderAzure), string(ProviderBaidu)}
+	validProviders := []string{string(ProviderTAL), string(ProviderOpenAI), string(ProviderClaude), string(ProviderAzure), string(ProviderBaidu), string(ProviderSpark)}
 	isValid := false
 	for _, provider := range validProviders {
 		if config.DefaultProvider == provider {
@@ -349,6 +362,9 @@ func (c *Config) GetAvailableProviders() []ProviderType {
 	// 检查各个服务商是否配置完整
 	if c.TAL.TAL_MLOPS_APP_ID != "" && c.TAL.TAL_MLOPS_APP_KEY != "" {
 		providers = append(providers, ProviderTAL)
+	}
+	if c.Spark.AppID != "" && c.Spark.APIKey != "" && c.Spark.APISecret != "" {
+		providers = append(providers, ProviderSpark)
 	}
 	if c.OpenAI.APIKey != "" {
 		providers = append(providers, ProviderOpenAI)

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -60,6 +61,8 @@ func NewClient(provider ProviderType, config *Config) (Client, error) {
 		return NewAzureClient(config.Azure)
 	case ProviderBaidu:
 		return NewBaiduClient(config.Baidu)
+	case ProviderSpark:
+		return NewSparkClient(config.Spark)
 	default:
 		return nil, fmt.Errorf("不支持的服务商: %s", provider)
 	}
@@ -73,12 +76,41 @@ type TALClient struct {
 	baseURL    string
 	authToken  string
 	client     *openai.Client // OpenAI兼容客户端
+
+	// 请求限流
+	requestMutex   sync.Mutex
+	lastRequestTime time.Time
+	minInterval     time.Duration // 最小请求间隔
 }
 
 // NewTALClient 创建TAL客户端
 func NewTALClient(config TALConfig) (*TALClient, error) {
 	// 构建认证token
 	authToken := fmt.Sprintf("%s:%s", config.TAL_MLOPS_APP_ID, config.TAL_MLOPS_APP_KEY)
+
+	// 从配置中获取请求间隔（如果有的话），否则使用默认值
+	minInterval := 1 * time.Second // 默认1秒
+	if config.Timeout > 0 {
+		// 可以根据配置调整间隔，这里暂时保持默认
+		minInterval = 1 * time.Second
+	}
+
+	fmt.Printf("🔧 初始化TAL AI客户端 - 端点: %s, 最小请求间隔: %.1f秒\n", config.BaseURL, minInterval.Seconds())
+
+	// 测试网络连接
+	fmt.Printf("🔍 测试TAL AI服务连接...\n")
+	testClient := &http.Client{Timeout: 10 * time.Second}
+	testURL := config.BaseURL + "/models"
+	testReq, _ := http.NewRequest("GET", testURL, nil)
+	testReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", authToken))
+
+	if testResp, testErr := testClient.Do(testReq); testErr == nil {
+		testResp.Body.Close()
+		fmt.Printf("✅ TAL AI服务连接正常 (状态码: %d)\n", testResp.StatusCode)
+	} else {
+		fmt.Printf("⚠️ TAL AI服务连接测试失败: %v\n", testErr)
+		fmt.Println("💡 可能的原因: 网络连接问题、服务不可用或认证信息错误")
+	}
 
 	// 设置内部AI服务端点
 	baseURL := config.BaseURL
@@ -88,11 +120,16 @@ func NewTALClient(config TALConfig) (*TALClient, error) {
 
 	// 创建HTTP客户端
 	httpClient := &http.Client{}
+	var timeoutSeconds int
 	if config.Timeout > 0 {
+		timeoutSeconds = config.Timeout
 		httpClient.Timeout = time.Duration(config.Timeout) * time.Second
 	} else {
+		timeoutSeconds = 70
 		httpClient.Timeout = 70 * time.Second // 默认70秒超时
 	}
+
+	fmt.Printf("🔧 HTTP客户端超时设置: %d秒\n", timeoutSeconds)
 
 	// 初始化OpenAI兼容客户端
 	openaiConfig := openai.DefaultConfig(authToken)
@@ -104,11 +141,13 @@ func NewTALClient(config TALConfig) (*TALClient, error) {
 			provider: ProviderTAL,
 			config:   &Config{TAL: config},
 		},
-		httpClient: httpClient,
-		config:     &config,
-		baseURL:    baseURL,
-		authToken:  authToken,
-		client:     client,
+		httpClient:     httpClient,
+		config:         &config,
+		baseURL:        baseURL,
+		authToken:      authToken,
+		client:         client,
+		minInterval:    minInterval, // 每秒最多1个请求
+		lastRequestTime: time.Now().Add(-minInterval * 2), // 初始化为过去的时间
 	}, nil
 }
 
@@ -131,7 +170,7 @@ func (c *TALClient) GetAvailableModels() []string {
 	return []string{
 		"qwen3-vl-plus",               // 图像分析主模型
 		"qwen-flash",                  // 文本生成主模型
-		"qwen3-max",                   // 复杂推理主模型
+		"qwen-flash",                  // 复杂推理主模型（更稳定）
 		"qwen3-omni-flash",            // 语音交互主模型
 		"qwen3-vl-235b-a22b-instruct", // 图像分析备用模型
 		"qwen-turbo",                  // 文本生成备用模型
@@ -202,11 +241,11 @@ func (c *TALClient) AnalyzeImage(ctx context.Context, imageURL, prompt string) (
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
 		// AI服务不可用时，返回默认响应
-		return c.getDefaultImageAnalysis(imageURL, prompt), nil
+		return getDefaultImageAnalysis(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultImageAnalysis(imageURL, prompt), nil
+		return getDefaultImageAnalysis(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -263,17 +302,17 @@ func (c *TALClient) GenerateQuestions(ctx context.Context, contextInfo string, c
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultQuestions(category), nil
+		return getDefaultQuestions(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultQuestions(category), nil
+		return getDefaultQuestions(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
 	questions := parseQuestionsFromJSON(content)
 	if len(questions) == 0 {
-		return c.getDefaultQuestions(category), nil
+		return getDefaultQuestions(), nil
 	}
 
 	return questions, nil
@@ -324,11 +363,11 @@ func (c *TALClient) PolishNote(ctx context.Context, rawContent, contextInfo stri
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultPolishedNote(rawContent, contextInfo), nil
+		return getDefaultPolishedNote(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultPolishedNote(rawContent, contextInfo), nil
+		return getDefaultPolishedNote(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -412,11 +451,11 @@ func (c *TALClient) TextToSpeech(ctx context.Context, text, voice, language stri
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultAudioData(text), "wav", nil
+		return getDefaultAudioData(), "wav", nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultAudioData(text), "wav", nil
+		return getDefaultAudioData(), "wav", nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -440,16 +479,16 @@ func (c *TALClient) TextToSpeech(ctx context.Context, text, voice, language stri
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &audioResult); err != nil {
-		return c.getDefaultAudioData(text), "wav", nil
+		return getDefaultAudioData(), "wav", nil
 	}
 
 	if audioResult.AudioData == "" {
-		return c.getDefaultAudioData(text), "wav", nil
+		return getDefaultAudioData(), "wav", nil
 	}
 
 	audioBytes, err := base64.StdEncoding.DecodeString(audioResult.AudioData)
 	if err != nil {
-		return c.getDefaultAudioData(text), "wav", nil
+		return getDefaultAudioData(), "wav", nil
 	}
 
 	format := audioResult.Format
@@ -463,7 +502,7 @@ func (c *TALClient) TextToSpeech(ctx context.Context, text, voice, language stri
 // AnalyzeVideo 视频分析
 func (c *TALClient) AnalyzeVideo(ctx context.Context, videoData []byte, format, analysisType string, duration float64) (*VideoAnalysis, error) {
 	// 简化实现，使用默认分析结果
-	return c.getDefaultVideoAnalysis(), nil
+	return getDefaultVideoAnalysis(), nil
 }
 
 // GenerateVideo 视频生成
@@ -511,11 +550,11 @@ func (c *TALClient) GenerateReactionTemplates(ctx context.Context, scenario, sty
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultReactionTemplates(scenario, style), nil
+		return getDefaultReactionTemplates(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultReactionTemplates(scenario, style), nil
+		return getDefaultReactionTemplates(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -538,7 +577,7 @@ func (c *TALClient) GenerateReactionTemplates(ctx context.Context, scenario, sty
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &result); err != nil {
-		return c.getDefaultReactionTemplates(scenario, style), nil
+		return getDefaultReactionTemplates(), nil
 	}
 
 	return result.Templates, nil
@@ -574,11 +613,11 @@ func (c *TALClient) AnalyzeExpressionStyle(ctx context.Context, personName strin
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultStyleAnalysis(personName), nil
+		return getDefaultStyleAnalysis(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultStyleAnalysis(personName), nil
+		return getDefaultStyleAnalysis(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -597,7 +636,7 @@ func (c *TALClient) AnalyzeExpressionStyle(ctx context.Context, personName strin
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &result); err != nil {
-		return c.getDefaultStyleAnalysis(personName), nil
+		return getDefaultStyleAnalysis(), nil
 	}
 
 	return &result, nil
@@ -635,11 +674,11 @@ func (c *TALClient) SimulateDebate(ctx context.Context, scenario string, difficu
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultDebateSimulation(scenario, difficulty, userStyle), nil
+		return getDefaultDebateSimulation(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultDebateSimulation(scenario, difficulty, userStyle), nil
+		return getDefaultDebateSimulation(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -658,7 +697,7 @@ func (c *TALClient) SimulateDebate(ctx context.Context, scenario string, difficu
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &result); err != nil {
-		return c.getDefaultDebateSimulation(scenario, difficulty, userStyle), nil
+		return getDefaultDebateSimulation(), nil
 	}
 
 	return &result, nil
@@ -666,6 +705,17 @@ func (c *TALClient) SimulateDebate(ctx context.Context, scenario string, difficu
 
 // GenerateResponseWithModel 使用指定模型生成回答
 func (c *TALClient) GenerateResponseWithModel(ctx context.Context, prompt, model string) (string, error) {
+	// 请求限流检查
+	c.requestMutex.Lock()
+	elapsed := time.Since(c.lastRequestTime)
+	if elapsed < c.minInterval {
+		waitTime := c.minInterval - elapsed
+		fmt.Printf("⏳ 请求过于频繁，等待 %.2f 秒...\n", waitTime.Seconds())
+		time.Sleep(waitTime)
+	}
+	c.lastRequestTime = time.Now()
+	c.requestMutex.Unlock()
+
 	// 构建OpenAI兼容的请求
 	requestBody := map[string]interface{}{
 		"model": model,
@@ -695,22 +745,61 @@ func (c *TALClient) GenerateResponseWithModel(ctx context.Context, prompt, model
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.authToken))
 
-	// 发送请求
+	// 发送请求（带超时监控）
+	fmt.Printf("🔄 发送AI请求到: %s, 模型: %s, 提示长度: %d\n", url, model, len(prompt))
+	fmt.Printf("⏳ 发送HTTP请求，等待响应...\n")
+	startTime := time.Now()
 	resp, err := c.httpClient.Do(req)
+	duration := time.Since(startTime)
+
 	if err != nil {
+		fmt.Printf("❌ HTTP请求失败，耗时: %.2fs, 错误: %v\n", duration.Seconds(), err)
+
+		// 检查是否是超时错误
+		if strings.Contains(err.Error(), "context deadline exceeded") ||
+		   strings.Contains(err.Error(), "Client.Timeout exceeded") {
+			fmt.Println("💡 超时建议: AI推理可能需要更长时间，请检查网络连接或增加超时设置")
+		}
+
 		return "", fmt.Errorf("发送请求失败: %w", err)
 	}
+
+	fmt.Printf("✅ HTTP请求成功，耗时: %.2fs\n", duration.Seconds())
 	defer resp.Body.Close()
 
 	// 读取响应
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		fmt.Printf("❌ AI响应读取失败: %v\n", err)
 		return "", fmt.Errorf("读取响应失败: %w", err)
 	}
 
+	fmt.Printf("📡 AI响应状态码: %d, 响应大小: %d bytes\n", resp.StatusCode, len(body))
+
 	if resp.StatusCode != http.StatusOK {
+		// 特殊处理429错误（配额超限）
+		if resp.StatusCode == 429 {
+			fmt.Printf("⚠️ AI服务配额超限 (429): %s\n", string(body))
+			fmt.Println("💡 建议: 检查API配额、降低请求频率或联系服务商")
+
+			// 尝试等待后重试一次
+			fmt.Println("🔄 等待5秒后重试...")
+			time.Sleep(5 * time.Second)
+
+			// 重置限流时间戳以允许重试
+			c.requestMutex.Lock()
+			c.lastRequestTime = time.Now().Add(-c.minInterval)
+			c.requestMutex.Unlock()
+
+			// 递归重试一次
+			return c.GenerateResponseWithModel(ctx, prompt, model)
+		} else {
+			fmt.Printf("❌ AI服务错误 (状态码: %d): %s\n", resp.StatusCode, string(body))
+		}
 		return "", fmt.Errorf("AI服务返回错误状态码: %d, 响应: %s", resp.StatusCode, string(body))
 	}
+
+	fmt.Println("✅ AI请求成功")
 
 	// 解析响应
 	var response map[string]interface{}
@@ -775,11 +864,11 @@ func (c *TALClient) EvaluateReaction(ctx context.Context, userResponse, scenario
 
 	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return c.getDefaultReactionEvaluation(), nil
+		return getDefaultReactionEvaluation(), nil
 	}
 
 	if len(resp.Choices) == 0 {
-		return c.getDefaultReactionEvaluation(), nil
+		return getDefaultReactionEvaluation(), nil
 	}
 
 	content := resp.Choices[0].Message.Content
@@ -798,7 +887,7 @@ func (c *TALClient) EvaluateReaction(ctx context.Context, userResponse, scenario
 	}
 
 	if err := json.Unmarshal([]byte(jsonContent), &result); err != nil {
-		return c.getDefaultReactionEvaluation(), nil
+		return getDefaultReactionEvaluation(), nil
 	}
 
 	return &result, nil
